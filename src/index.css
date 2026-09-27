@@ -1,4 +1,9 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
 
 @layer base {
   :root {
@@ -14,12 +19,17 @@
   }
 
   body {
-    background-color: var(--color-ivory);
-    color: var(--color-ink);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     margin: 0;
     padding: 0;
+    @apply bg-background text-foreground;
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
@@ -41,4 +51,118 @@
 *:focus-visible {
   outline: 2px solid #E7B84B;
   outline-offset: 2px;
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Cyclewise brand mapping — see the --color-* tokens declared above */
+  --background: var(--color-ivory);
+  --foreground: var(--color-ink);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-ink);
+  --primary: var(--color-indigo-deep);
+  --primary-foreground: var(--color-maize-gold);
+  --secondary: var(--color-maize-gold);
+  --secondary-foreground: var(--color-indigo-deep);
+  --muted: var(--color-ivory);
+  --muted-foreground: var(--color-slate);
+  --accent: #EAF5F0;
+  --accent-foreground: var(--color-leaf-green);
+  --destructive: #DC2626;
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-maize-gold);
+  --chart-1: var(--color-indigo-deep);
+  --chart-2: var(--color-leaf-green);
+  --chart-3: var(--color-maize-gold);
+  --chart-4: var(--color-burnt-orange);
+  --chart-5: var(--color-slate);
+  --radius: 0.625rem;
+  --sidebar: var(--color-indigo-deep);
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: var(--color-maize-gold);
+  --sidebar-primary-foreground: var(--color-indigo-deep);
+  --sidebar-accent: #253752;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #263753;
+  --sidebar-ring: var(--color-maize-gold);
+}
+
+.dark {
+  /* Cyclewise brand mapping — dark mode */
+  --background: #0E1420;
+  --foreground: #F1EFE7;
+  --card: #18243A;
+  --card-foreground: #F1EFE7;
+  --popover: #18243A;
+  --popover-foreground: #F1EFE7;
+  --primary: var(--color-maize-gold);
+  --primary-foreground: var(--color-indigo-deep);
+  --secondary: #253752;
+  --secondary-foreground: #F1EFE7;
+  --muted: #182238;
+  --muted-foreground: #A6B2C3;
+  --accent: #1B3A2E;
+  --accent-foreground: #6FCB9F;
+  --destructive: #F87171;
+  --border: #263753;
+  --input: #263753;
+  --ring: var(--color-maize-gold);
+  --chart-1: var(--color-maize-gold);
+  --chart-2: #6FCB9F;
+  --chart-3: var(--color-burnt-orange);
+  --chart-4: #8FA3C4;
+  --chart-5: var(--color-leaf-green);
+  --sidebar: var(--color-indigo-deep);
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: var(--color-maize-gold);
+  --sidebar-primary-foreground: var(--color-indigo-deep);
+  --sidebar-accent: #253752;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #263753;
+  --sidebar-ring: var(--color-maize-gold);
 }

@@ -34,6 +34,8 @@ SEEDED_SMES.forEach((s) => smesMap.set(s.id, s));
 app.get('/api/v1/health', async (_req, res) => {
   const notifHealth = await ProviderRegistry.getNotification().healthCheck();
   const idHealth = await ProviderRegistry.getIdentity().healthCheck();
+  const paymentProvider = ProviderRegistry.getPayment();
+  const paymentHealth = await paymentProvider.healthCheck();
 
   res.json({
     status: 'healthy',
@@ -44,6 +46,7 @@ app.get('/api/v1/health', async (_req, res) => {
       notification: notifHealth,
       identity: idHealth,
       logistics: { status: 'healthy', provider: 'MockSwiftCouriers' },
+      payment: { ...paymentHealth, provider: paymentProvider.name, is_live: paymentProvider.isLive },
     },
     demo_mode: true,
   });
@@ -203,6 +206,7 @@ app.get('/api/v1/agent/models', (_req, res) => {
     default_cascade: [
       'NVIDIA Nemotron 3 Ultra (nvidia/nemotron-3-super-120b)',
       'Google Gemini 3.8 Flash (gemini-3.8-flash)',
+      'Anthropic Claude Sonnet 5 (claude-sonnet-5)',
       'Google Gemini 3.1 Flash Lite [Failsafe] (gemini-3.1-flash-lite)',
       'Google Gemini 3.1 Pro [Failsafe] (gemini-3.1-pro-preview)',
       'Deterministic Grounded Engine (cyclewise-dfs-v1)',
@@ -301,6 +305,161 @@ app.get('/api/v1/agent/trajectories', (_req, res) => {
     trajectories: agent.getTrajectories(),
     count: agent.getTrajectories().length,
   });
+});
+
+// -------------------------------------------------------------
+// M-Pesa Daraja: Optional Same-Day Balance Top-Up
+// (never a loan — settles the residual, non-barterable sliver of an
+// otherwise-reciprocal exchange cycle; KES amounts are always small)
+// -------------------------------------------------------------
+
+interface MpesaTransactionRecord {
+  checkout_request_id: string;
+  merchant_request_id?: string;
+  cycle_id?: string;
+  sme_id?: string;
+  phone_number: string;
+  amount: number;
+  status: 'pending' | 'completed' | 'failed';
+  mpesa_receipt_number?: string;
+  result_desc?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+const mpesaTransactions = new Map<string, MpesaTransactionRecord>();
+
+// 14. M-Pesa: Initiate STK Push (balance top-up)
+app.post('/api/v1/mpesa/stkpush', async (req, res) => {
+  const { phone_number, amount, cycle_id, sme_id, account_reference, transaction_desc } = req.body;
+
+  if (!phone_number || typeof phone_number !== 'string') {
+    res.status(400).json({ error: 'Missing or invalid "phone_number" string' });
+    return;
+  }
+  const numericAmount = Number(amount);
+  if (!numericAmount || numericAmount <= 0) {
+    res.status(400).json({ error: 'Missing or invalid "amount" — must be a positive number' });
+    return;
+  }
+
+  try {
+    const provider = ProviderRegistry.getPayment();
+    const result = await provider.initiateStkPush({
+      phoneNumber: phone_number,
+      amount: numericAmount,
+      accountReference: account_reference || cycle_id || 'CYCLEWISE',
+      transactionDesc: transaction_desc || 'Cyclewise balance top-up',
+    });
+
+    if (result.success && result.checkoutRequestId) {
+      mpesaTransactions.set(result.checkoutRequestId, {
+        checkout_request_id: result.checkoutRequestId,
+        merchant_request_id: result.merchantRequestId,
+        cycle_id,
+        sme_id,
+        phone_number,
+        amount: numericAmount,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    res.json({
+      success: result.success,
+      provider: result.provider,
+      is_live: provider.isLive,
+      checkout_request_id: result.checkoutRequestId,
+      merchant_request_id: result.merchantRequestId,
+      customer_message: result.customerMessage,
+      error: result.error,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'M-Pesa STK Push error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// 15. M-Pesa: Safaricom Daraja Callback Receiver (public webhook — no auth)
+app.post('/api/v1/mpesa/callback', (req, res) => {
+  // Acknowledge immediately; Safaricom retries aggressively on non-200 responses.
+  res.status(200).json({ ResultCode: 0, ResultDesc: 'Accepted' });
+
+  try {
+    const stkCallback = req.body?.Body?.stkCallback;
+    if (!stkCallback?.CheckoutRequestID) return;
+
+    const existing = mpesaTransactions.get(stkCallback.CheckoutRequestID);
+    const items: Array<{ Name: string; Value: string | number }> = stkCallback.CallbackMetadata?.Item || [];
+    const findItem = (name: string) => items.find((i) => i.Name === name)?.Value;
+
+    mpesaTransactions.set(stkCallback.CheckoutRequestID, {
+      checkout_request_id: stkCallback.CheckoutRequestID,
+      merchant_request_id: stkCallback.MerchantRequestID,
+      cycle_id: existing?.cycle_id,
+      sme_id: existing?.sme_id,
+      phone_number: String(findItem('PhoneNumber') || existing?.phone_number || ''),
+      amount: Number(findItem('Amount') || existing?.amount || 0),
+      status: stkCallback.ResultCode === 0 ? 'completed' : 'failed',
+      mpesa_receipt_number: findItem('MpesaReceiptNumber') as string | undefined,
+      result_desc: stkCallback.ResultDesc,
+      created_at: existing?.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[M-Pesa Callback] Failed to process callback payload:', err);
+  }
+});
+
+// 16. M-Pesa: Poll Transaction Status
+app.get('/api/v1/mpesa/status/:checkoutRequestId', async (req, res) => {
+  const { checkoutRequestId } = req.params;
+  const cached = mpesaTransactions.get(checkoutRequestId);
+
+  // If the callback already resolved it (or updated it beyond 'pending'), trust the cache.
+  if (cached && cached.status !== 'pending') {
+    res.json({ source: 'callback', ...cached });
+    return;
+  }
+
+  // Otherwise actively poll Daraja — useful in local dev where the callback
+  // URL usually isn't publicly reachable without a tunnel (e.g. ngrok).
+  try {
+    const provider = ProviderRegistry.getPayment();
+    const live = await provider.queryStkPushStatus(checkoutRequestId);
+
+    if (live.state === 'completed' || live.state === 'failed') {
+      const updated: MpesaTransactionRecord = {
+        checkout_request_id: checkoutRequestId,
+        cycle_id: cached?.cycle_id,
+        sme_id: cached?.sme_id,
+        phone_number: live.phoneNumber || cached?.phone_number || '',
+        amount: live.amount || cached?.amount || 0,
+        status: live.state,
+        mpesa_receipt_number: live.mpesaReceiptNumber,
+        result_desc: live.resultDesc,
+        created_at: cached?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      mpesaTransactions.set(checkoutRequestId, updated);
+      res.json({ source: 'query', ...updated });
+      return;
+    }
+
+    res.json(
+      cached || {
+        checkout_request_id: checkoutRequestId,
+        status: 'pending',
+        phone_number: '',
+        amount: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+    );
+  } catch {
+    res.json(cached || { checkout_request_id: checkoutRequestId, status: 'pending' });
+  }
 });
 
 // -------------------------------------------------------------

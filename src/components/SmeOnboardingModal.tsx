@@ -3,29 +3,41 @@ import { SMEProfile, ExchangeCycle, DirectedEdge } from '../agent/types';
 import { DeterministicGraphEngine } from '../engine/graphEngine';
 import {
   Store,
-  CheckCircle2,
   ArrowRight,
   ArrowLeft,
   Sparkles,
-  Shield,
-  Layers,
   MapPin,
-  TrendingUp,
   AlertCircle,
   Package,
   Boxes,
   Truck,
   FileText,
-  X,
   Bot,
   DollarSign,
-  MessageSquare,
   Building2,
   Globe2,
   Percent,
+  RefreshCw,
   Check,
-  RefreshCw
 } from 'lucide-react';
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Field, FieldGroup, FieldLabel, FieldDescription } from '@/components/ui/field';
+import { Message, MessageContent } from '@/components/ui/message';
+import { Bubble, BubbleContent } from '@/components/ui/bubble';
 
 interface SmeOnboardingModalProps {
   isOpen: boolean;
@@ -102,49 +114,44 @@ const PRESETS: SmePreset[] = [
   },
 ];
 
+const STEPS: { id: string; label: string }[] = [
+  { id: 'initial_info', label: 'Business Info' },
+  { id: 'agent_surplus', label: 'What You Offer' },
+  { id: 'agent_need', label: 'What You Need' },
+  { id: 'agent_description', label: 'Details' },
+  { id: 'agent_matching', label: 'Matches' },
+];
+
 export const SmeOnboardingModal: React.FC<SmeOnboardingModalProps> = ({
   isOpen,
   onClose,
   engine,
   onComplete,
 }) => {
-  // Flow State: 
-  // 'initial_info' -> Onboarding step 1: Name, Sector, Location, Language (no description yet!)
-  // 'agent_surplus' -> Agent asks for Surplus: Item, Quantity, Price
-  // 'agent_need' -> Agent asks for Need: Item, Quantity, Price Range (Min - Max)
-  // 'agent_description' -> Option to add business description to agent
-  // 'agent_matching' -> Agent verifies zero-debt rules, runs DFS graph matching, shows % and manifest
   const [phase, setPhase] = useState<'initial_info' | 'agent_surplus' | 'agent_need' | 'agent_description' | 'agent_matching'>('initial_info');
 
-  // Step 1: Business Profile (No description yet as requested)
   const [businessName, setBusinessName] = useState('');
   const [sector, setSector] = useState('Food Retail & Baking');
   const [location, setLocation] = useState('Nairobi Eastleigh');
   const [primaryLanguage, setPrimaryLanguage] = useState<'en' | 'sw' | 'sheng' | 'mixed_sw_en'>('en');
 
-  // Agent Step A: Surplus (Item, Quantity, Price)
   const [offerItem, setOfferItem] = useState('');
   const [offerQty, setOfferQty] = useState<number>(150);
   const [offerUnit, setOfferUnit] = useState('loaves');
   const [offerPrice, setOfferPrice] = useState<number>(18000);
 
-  // Agent Step B: Need (Item, Quantity, Price Range)
   const [needItem, setNeedItem] = useState('');
   const [needQty, setNeedQty] = useState<number>(200);
   const [needUnit, setNeedUnit] = useState('boxes');
   const [needPriceMin, setNeedPriceMin] = useState<number>(16000);
   const [needPriceMax, setNeedPriceMax] = useState<number>(20000);
 
-  // Agent Step C: Option to add Business Description to Agent
   const [businessDescription, setBusinessDescription] = useState('');
 
-  // Processing & Graph Computation
   const [isProcessing, setIsProcessing] = useState(false);
   const [discoveredCycles, setDiscoveredCycles] = useState<ExchangeCycle[]>([]);
-  const [generatedEdges, setGeneratedEdges] = useState<DirectedEdge[]>([]);
+  const [, setGeneratedEdges] = useState<DirectedEdge[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  if (!isOpen) return null;
 
   const handleApplyPreset = (preset: SmePreset) => {
     setBusinessName(preset.name);
@@ -169,7 +176,6 @@ export const SmeOnboardingModal: React.FC<SmeOnboardingModalProps> = ({
       return;
     }
     setErrorMsg(null);
-    // Hand off immediately to conversational agent intake
     setPhase('agent_surplus');
   };
 
@@ -206,7 +212,6 @@ export const SmeOnboardingModal: React.FC<SmeOnboardingModalProps> = ({
     setErrorMsg(null);
 
     const newSmeId = `sme-${businessName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString().slice(-4)}`;
-    const avgNeedVal = Math.round((needPriceMin + needPriceMax) / 2);
 
     const newSme: SMEProfile = {
       id: newSmeId,
@@ -231,15 +236,12 @@ export const SmeOnboardingModal: React.FC<SmeOnboardingModalProps> = ({
     };
 
     try {
-      // 1. Register with Local Deterministic Graph Engine
       const edges = engine.addSME(newSme);
       setGeneratedEdges(edges);
 
-      // 2. Compute Feasible Closed Cycles (DFS)
       const result = await engine.findCycles(4);
       setDiscoveredCycles(result.cycles);
 
-      // 3. Sync to API backend if available
       try {
         await fetch('/api/v1/sme/onboard', {
           method: 'POST',
@@ -290,180 +292,162 @@ export const SmeOnboardingModal: React.FC<SmeOnboardingModalProps> = ({
 
   const bestMatch = discoveredCycles.find((c) => c.sme_sequence.some((id) => id.includes(businessName.toLowerCase().slice(0, 4)))) || discoveredCycles[0];
   const matchPercentage = bestMatch ? Math.round(bestMatch.score_breakdown.final_score * 100) : 94;
+  const currentStepIndex = STEPS.findIndex((s) => s.id === phase);
+
+  const agentBubble = (text: string) => (
+    <Message>
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+        <Bot className="size-4" />
+      </div>
+      <MessageContent>
+        <Bubble variant="tinted">
+          <BubbleContent className="leading-relaxed">{text}</BubbleContent>
+        </Bubble>
+      </MessageContent>
+    </Message>
+  );
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
-      <div className="bg-white rounded-2xl max-w-3xl w-full border border-[#E3E0D7] shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="bg-[#18243A] text-white px-5 py-4 border-b border-[#253654] flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-[#E7B84B] text-[#18243A] flex items-center justify-center font-bold text-lg shadow-xs">
-              ↻
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-3xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-5 py-4 bg-primary text-primary-foreground gap-1">
+          <div className="flex items-center gap-3">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+              <RefreshCw className="size-4" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="font-bold text-base text-white">SME Onboarding & Agent Guided Intake</h2>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#2E8B68]/30 text-[#85E2BD] font-semibold border border-[#2E8B68]/50">
-                  Zero-Debt Protocol
-                </span>
-              </div>
-              <p className="text-xs text-[#A6B2C3]">Step-by-step registration & matching for Nairobi businesses</p>
+              <DialogTitle className="text-primary-foreground">Add Your Business</DialogTitle>
+              <DialogDescription className="text-primary-foreground/70">
+                A few quick questions, then we&apos;ll find your first match
+              </DialogDescription>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-[#A6B2C3] hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Progress Tracker */}
-        <div className="bg-[#F7F5EF] px-5 py-2.5 border-b border-[#EBE7DC] flex items-center justify-between text-xs overflow-x-auto">
-          <div className={`flex items-center space-x-1.5 shrink-0 ${phase === 'initial_info' ? 'font-bold text-[#18243A]' : 'text-[#68727D]'}`}>
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${phase === 'initial_info' ? 'bg-[#18243A] text-[#E7B84B]' : 'bg-[#2E8B68] text-white'}`}>
-              {phase === 'initial_info' ? '1' : '✓'}
-            </span>
-            <span>1. Business Info</span>
-          </div>
-          <ArrowRight className="w-3.5 h-3.5 text-[#C4C0B4] shrink-0 mx-1" />
-
-          <div className={`flex items-center space-x-1.5 shrink-0 ${phase === 'agent_surplus' ? 'font-bold text-[#18243A]' : phase === 'initial_info' ? 'text-[#68727D]' : 'text-[#2E8B68]'}`}>
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${phase === 'agent_surplus' ? 'bg-[#18243A] text-[#E7B84B]' : ['agent_need', 'agent_description', 'agent_matching'].includes(phase) ? 'bg-[#2E8B68] text-white' : 'bg-[#E3E0D7] text-[#68727D]'}`}>
-              {['agent_need', 'agent_description', 'agent_matching'].includes(phase) ? '✓' : '2'}
-            </span>
-            <span>2. Agent: Surplus</span>
-          </div>
-          <ArrowRight className="w-3.5 h-3.5 text-[#C4C0B4] shrink-0 mx-1" />
-
-          <div className={`flex items-center space-x-1.5 shrink-0 ${phase === 'agent_need' ? 'font-bold text-[#18243A]' : ['agent_description', 'agent_matching'].includes(phase) ? 'text-[#2E8B68]' : 'text-[#68727D]'}`}>
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${phase === 'agent_need' ? 'bg-[#18243A] text-[#E7B84B]' : ['agent_description', 'agent_matching'].includes(phase) ? 'bg-[#2E8B68] text-white' : 'bg-[#E3E0D7] text-[#68727D]'}`}>
-              {['agent_description', 'agent_matching'].includes(phase) ? '✓' : '3'}
-            </span>
-            <span>3. Agent: Need (Range)</span>
-          </div>
-          <ArrowRight className="w-3.5 h-3.5 text-[#C4C0B4] shrink-0 mx-1" />
-
-          <div className={`flex items-center space-x-1.5 shrink-0 ${phase === 'agent_description' ? 'font-bold text-[#18243A]' : phase === 'agent_matching' ? 'text-[#2E8B68]' : 'text-[#68727D]'}`}>
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${phase === 'agent_description' ? 'bg-[#18243A] text-[#E7B84B]' : phase === 'agent_matching' ? 'bg-[#2E8B68] text-white' : 'bg-[#E3E0D7] text-[#68727D]'}`}>
-              {phase === 'agent_matching' ? '✓' : '4'}
-            </span>
-            <span>4. Description</span>
-          </div>
-          <ArrowRight className="w-3.5 h-3.5 text-[#C4C0B4] shrink-0 mx-1" />
-
-          <div className={`flex items-center space-x-1.5 shrink-0 ${phase === 'agent_matching' ? 'font-bold text-[#2E8B68]' : 'text-[#68727D]'}`}>
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${phase === 'agent_matching' ? 'bg-[#2E8B68] text-white' : 'bg-[#E3E0D7] text-[#68727D]'}`}>
-              5
-            </span>
-            <span>5. Matches (% & Loop)</span>
-          </div>
+        <div className="bg-muted px-5 py-2.5 border-b flex items-center justify-between text-xs overflow-x-auto">
+          {STEPS.map((step, idx) => (
+            <React.Fragment key={step.id}>
+              <div
+                className={`flex items-center gap-1.5 shrink-0 ${
+                  idx === currentStepIndex ? 'font-bold text-foreground' : idx < currentStepIndex ? 'text-(--color-leaf-green)' : 'text-muted-foreground'
+                }`}
+              >
+                <span
+                  className={`flex size-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                    idx === currentStepIndex
+                      ? 'bg-primary text-primary-foreground'
+                      : idx < currentStepIndex
+                      ? 'bg-(--color-leaf-green) text-white'
+                      : 'bg-border text-muted-foreground'
+                  }`}
+                >
+                  {idx < currentStepIndex ? <Check className="size-3" /> : idx + 1}
+                </span>
+                <span>{idx + 1}. {step.label}</span>
+              </div>
+              {idx < STEPS.length - 1 && <ArrowRight className="size-3.5 text-border shrink-0 mx-1" />}
+            </React.Fragment>
+          ))}
         </div>
 
         {/* Modal Body */}
         <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5">
           {errorMsg && (
-            <div className="p-3 rounded-lg bg-[#FEE2E2] border border-[#F87171] text-[#991B1B] text-xs flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMsg}</span>
-            </div>
+            <Alert variant="destructive">
+              <AlertCircle />
+              <AlertDescription>{errorMsg}</AlertDescription>
+            </Alert>
           )}
 
-          {/* ========================================================================= */}
-          {/* PHASE 1: INITIAL INFO (Business Name, Industry, Location, Language ONLY) */}
-          {/* ========================================================================= */}
+          {/* PHASE 1: INITIAL INFO */}
           {phase === 'initial_info' && (
             <form onSubmit={handleInitialInfoSubmit} className="space-y-5">
               <div>
-                <h3 className="text-sm font-bold text-[#18243A] flex items-center space-x-2">
-                  <Building2 className="w-4 h-4 text-[#E7B84B]" />
-                  <span>Step 1: Register Your SME Node</span>
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Building2 className="size-4 text-(--color-maize-gold)" />
+                  <span>Tell us about your business</span>
                 </h3>
-                <p className="text-xs text-[#68727D] mt-0.5">
-                  Enter your core business identifiers. Once registered, the Cyclewise AI Agent will guide you through surplus and need intake.
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Basic details so other businesses know who you are.
                 </p>
               </div>
 
-              {/* Quick Preset Selector */}
-              <div className="p-3.5 rounded-xl bg-[#F7F5EF] border border-[#E3E0D7] space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#68727D] block">
-                  Quick-Fill Verified SME Profiles:
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {PRESETS.map((p) => (
-                    <button
-                      key={p.name}
-                      type="button"
-                      onClick={() => handleApplyPreset(p)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                        businessName === p.name
-                          ? 'bg-[#18243A] text-[#E7B84B] border-[#18243A] shadow-xs'
-                          : 'bg-white text-[#18243A] border-[#E3E0D7] hover:border-[#18243A]'
-                      }`}
-                    >
-                      + {p.name} ({p.sector})
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <Card size="sm">
+                <CardContent className="space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Try a sample business:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {PRESETS.map((p) => (
+                      <Button
+                        key={p.name}
+                        type="button"
+                        size="sm"
+                        variant={businessName === p.name ? 'default' : 'outline'}
+                        onClick={() => handleApplyPreset(p)}
+                      >
+                        + {p.name} ({p.sector})
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                {/* 1. Business Name */}
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="font-bold text-[#18243A] flex items-center space-x-1.5">
-                    <Store className="w-3.5 h-3.5 text-[#2E8B68]" />
-                    <span>Registered Business Name *</span>
-                  </label>
-                  <input
-                    type="text"
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="business-name">
+                    <Store className="size-3.5 text-(--color-leaf-green)" />
+                    Registered Business Name *
+                  </FieldLabel>
+                  <Input
+                    id="business-name"
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
                     placeholder="e.g. Mama Terry Artisan Bakery"
                     required
-                    className="w-full px-3 py-2 rounded-lg border border-[#E3E0D7] focus:outline-hidden focus:border-[#18243A] text-sm bg-white"
                   />
+                </Field>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field>
+                    <FieldLabel htmlFor="sector">Industry / Sector *</FieldLabel>
+                    <Select value={sector} onValueChange={(v) => v && setSector(v)}>
+                      <SelectTrigger id="sector" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Food Retail & Baking">Food Retail & Baking</SelectItem>
+                        <SelectItem value="Packaging & Materials">Packaging & Materials</SelectItem>
+                        <SelectItem value="Logistics & Dispatch">Logistics & Dispatch</SelectItem>
+                        <SelectItem value="Professional Services & Accounting">Professional Services & Accounting</SelectItem>
+                        <SelectItem value="Agricultural Processing">Agricultural Processing</SelectItem>
+                        <SelectItem value="Light Manufacturing & Energy">Light Manufacturing & Energy</SelectItem>
+                        <SelectItem value="Hospitality & Catering">Hospitality & Catering</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="location">
+                      <MapPin className="size-3.5 text-(--color-burnt-orange)" />
+                      Location *
+                    </FieldLabel>
+                    <Input
+                      id="location"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      placeholder="e.g. Nairobi Pangani / Eastleigh"
+                      required
+                    />
+                  </Field>
                 </div>
 
-                {/* 2. Industry / Sector */}
-                <div className="space-y-1">
-                  <label className="font-bold text-[#18243A]">Industry / Sector *</label>
-                  <select
-                    value={sector}
-                    onChange={(e) => setSector(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-[#E3E0D7] focus:outline-hidden focus:border-[#18243A] text-xs bg-white"
-                  >
-                    <option value="Food Retail & Baking">Food Retail & Baking</option>
-                    <option value="Packaging & Materials">Packaging & Materials</option>
-                    <option value="Logistics & Dispatch">Logistics & Dispatch</option>
-                    <option value="Professional Services & Accounting">Professional Services & Accounting</option>
-                    <option value="Agricultural Processing">Agricultural Processing</option>
-                    <option value="Light Manufacturing & Energy">Light Manufacturing & Energy</option>
-                    <option value="Hospitality & Catering">Hospitality & Catering</option>
-                  </select>
-                </div>
-
-                {/* 3. Location */}
-                <div className="space-y-1">
-                  <label className="font-bold text-[#18243A] flex items-center space-x-1">
-                    <MapPin className="w-3.5 h-3.5 text-[#D8783D]" />
-                    <span>Nairobi Node Location *</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    placeholder="e.g. Nairobi Pangani / Eastleigh"
-                    required
-                    className="w-full px-3 py-2 rounded-lg border border-[#E3E0D7] focus:outline-hidden focus:border-[#18243A] text-xs bg-white"
-                  />
-                </div>
-
-                {/* 4. Language */}
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="font-bold text-[#18243A] flex items-center space-x-1">
-                    <Globe2 className="w-3.5 h-3.5 text-[#18243A]" />
-                    <span>Primary Communication Language</span>
-                  </label>
+                <Field>
+                  <FieldLabel>
+                    <Globe2 className="size-3.5" />
+                    Primary Communication Language
+                  </FieldLabel>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
                       { id: 'en', label: 'English' },
@@ -471,424 +455,363 @@ export const SmeOnboardingModal: React.FC<SmeOnboardingModalProps> = ({
                       { id: 'sheng', label: 'Sheng' },
                       { id: 'mixed_sw_en', label: 'Mixed Swahili-English' },
                     ].map((l) => (
-                      <button
+                      <Button
                         key={l.id}
                         type="button"
+                        size="sm"
+                        variant={primaryLanguage === l.id ? 'default' : 'outline'}
                         onClick={() => setPrimaryLanguage(l.id as typeof primaryLanguage)}
-                        className={`px-3 py-2 rounded-lg border text-xs font-semibold text-center transition-all ${
-                          primaryLanguage === l.id
-                            ? 'bg-[#18243A] text-[#E7B84B] border-[#18243A]'
-                            : 'bg-white text-[#68727D] border-[#E3E0D7] hover:border-[#18243A]'
-                        }`}
                       >
                         {l.label}
-                      </button>
+                      </Button>
                     ))}
                   </div>
-                </div>
-              </div>
+                </Field>
+              </FieldGroup>
 
-              <div className="pt-4 border-t border-[#EFECE4] flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 rounded-lg border border-[#E3E0D7] text-xs font-semibold text-[#68727D] hover:bg-[#F7F5EF]"
-                >
+              <div className="pt-4 border-t flex items-center justify-between">
+                <Button type="button" variant="outline" onClick={onClose}>
                   Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-lg bg-[#18243A] hover:bg-[#253752] text-[#E7B84B] font-bold text-xs flex items-center space-x-2 transition-all shadow-xs"
-                >
-                  <span>Continue to Agent Intake</span>
-                  <ArrowRight className="w-4 h-4 text-[#E7B84B]" />
-                </button>
+                </Button>
+                <Button type="submit">
+                  Continue to Agent Intake
+                  <ArrowRight data-icon="inline-end" />
+                </Button>
               </div>
             </form>
           )}
 
-          {/* ========================================================================= */}
-          {/* PHASE 2: AGENT SURPLUS INTAKE (Item, Quantity, Fair Price in KES)        */}
-          {/* ========================================================================= */}
+          {/* PHASE 2: AGENT SURPLUS INTAKE */}
           {phase === 'agent_surplus' && (
             <form onSubmit={handleSurplusSubmit} className="space-y-5">
-              {/* Agent Message Bubble */}
-              <div className="p-4 rounded-xl bg-[#18243A] text-white flex items-start space-x-3 shadow-xs">
-                <div className="w-8 h-8 rounded-lg bg-[#E7B84B] text-[#18243A] flex items-center justify-center shrink-0">
-                  <Bot className="w-5 h-5 text-[#18243A]" />
-                </div>
-                <div className="space-y-1 text-xs">
-                  <span className="font-bold text-[#E7B84B]">Cyclewise Agent:</span>
-                  <p className="text-[#E2E8F0] leading-relaxed">
-                    {primaryLanguage === 'sw' || primaryLanguage === 'mixed_sw_en'
-                      ? `Habari ${businessName}! Ni ziada (surplus capacity au bidhaa) gani unayo kwa sasa ambayo unaweza kupeana kwa biashara zingine Nairobi? Tafadhali weka jina la bidhaa, kiwango, na thamani ya bei ya sokoni (KES).`
-                      : `Welcome ${businessName}! What surplus capacity, inventory, or service hours do you currently have available to offer to other Nairobi businesses? Please provide the item title, quantity, and its fair market price in KES.`}
-                  </p>
-                </div>
-              </div>
+              {agentBubble(
+                primaryLanguage === 'sw' || primaryLanguage === 'mixed_sw_en'
+                  ? `Habari ${businessName}! Ni ziada (surplus capacity au bidhaa) gani unayo kwa sasa ambayo unaweza kupeana kwa biashara zingine Nairobi? Tafadhali weka jina la bidhaa, kiwango, na thamani ya bei ya sokoni (KES).`
+                  : `Welcome ${businessName}! What surplus capacity, inventory, or service hours do you currently have available to offer to other Nairobi businesses? Please provide the item title, quantity, and its fair market price in KES.`
+              )}
 
-              <div className="p-4 rounded-xl bg-[#F7F5EF] border border-[#EBE7DC] space-y-4 text-xs">
-                <div className="space-y-1">
-                  <label className="font-bold text-[#18243A] flex items-center space-x-1.5">
-                    <Package className="w-3.5 h-3.5 text-[#2E8B68]" />
-                    <span>1. Surplus Item / Service Title *</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={offerItem}
-                    onChange={(e) => setOfferItem(e.target.value)}
-                    placeholder="e.g. Freshly baked artisanal sourdough loaves (weekly surplus)"
-                    required
-                    className="w-full px-3 py-2.5 rounded-lg border border-[#E3E0D7] focus:outline-hidden focus:border-[#18243A] text-xs bg-white"
-                  />
-                </div>
+              <Card size="sm">
+                <CardContent>
+                  <FieldGroup>
+                    <Field>
+                      <FieldLabel htmlFor="offer-item">
+                        <Package className="size-3.5 text-(--color-leaf-green)" />
+                        1. Surplus Item / Service Title *
+                      </FieldLabel>
+                      <Input
+                        id="offer-item"
+                        value={offerItem}
+                        onChange={(e) => setOfferItem(e.target.value)}
+                        placeholder="e.g. Freshly baked artisanal sourdough loaves (weekly surplus)"
+                        required
+                      />
+                    </Field>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="font-bold text-[#18243A]">2. Quantity *</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={offerQty}
-                      onChange={(e) => setOfferQty(Number(e.target.value))}
-                      required
-                      className="w-full px-3 py-2 rounded-lg border border-[#E3E0D7] text-xs bg-white"
-                    />
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <Field>
+                        <FieldLabel htmlFor="offer-qty">2. Quantity *</FieldLabel>
+                        <Input
+                          id="offer-qty"
+                          type="number"
+                          min={1}
+                          value={offerQty}
+                          onChange={(e) => setOfferQty(Number(e.target.value))}
+                          required
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="offer-unit">Unit of Measure *</FieldLabel>
+                        <Input
+                          id="offer-unit"
+                          value={offerUnit}
+                          onChange={(e) => setOfferUnit(e.target.value)}
+                          placeholder="e.g. loaves, cartons, kg, hours"
+                          required
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="offer-price">
+                          <DollarSign className="size-3.5 text-(--color-leaf-green)" />
+                          3. Total Value (KES) *
+                        </FieldLabel>
+                        <Input
+                          id="offer-price"
+                          type="number"
+                          min={100}
+                          step={100}
+                          value={offerPrice}
+                          onChange={(e) => setOfferPrice(Number(e.target.value))}
+                          required
+                          className="font-bold text-(--color-leaf-green)"
+                        />
+                      </Field>
+                    </div>
 
-                  <div className="space-y-1">
-                    <label className="font-bold text-[#18243A]">Unit of Measure *</label>
-                    <input
-                      type="text"
-                      value={offerUnit}
-                      onChange={(e) => setOfferUnit(e.target.value)}
-                      placeholder="e.g. loaves, cartons, kg, hours"
-                      required
-                      className="w-full px-3 py-2 rounded-lg border border-[#E3E0D7] text-xs bg-white"
-                    />
-                  </div>
+                    <FieldDescription className="flex items-center justify-between rounded-lg border bg-background px-3 py-2">
+                      <span>Unit Price Breakdown:</span>
+                      <span className="font-semibold text-foreground">
+                        ~KES {offerQty > 0 ? (offerPrice / offerQty).toFixed(1) : 0} per {offerUnit}
+                      </span>
+                    </FieldDescription>
+                  </FieldGroup>
+                </CardContent>
+              </Card>
 
-                  <div className="space-y-1">
-                    <label className="font-bold text-[#18243A] flex items-center space-x-1">
-                      <DollarSign className="w-3 h-3 text-[#2E8B68]" />
-                      <span>3. Total Value / Price (KES) *</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={100}
-                      step={100}
-                      value={offerPrice}
-                      onChange={(e) => setOfferPrice(Number(e.target.value))}
-                      required
-                      className="w-full px-3 py-2 rounded-lg border border-[#E3E0D7] font-bold text-[#2E8B68] text-xs bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-white border border-[#E3E0D7] flex items-center justify-between text-[11px] text-[#68727D]">
-                  <span>Unit Price Breakdown:</span>
-                  <span className="font-semibold text-[#18243A]">
-                    ~KES {offerQty > 0 ? (offerPrice / offerQty).toFixed(1) : 0} per {offerUnit}
-                  </span>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-[#EFECE4] flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setPhase('initial_info')}
-                  className="px-3.5 py-2 rounded-lg border border-[#E3E0D7] text-xs font-semibold text-[#68727D] hover:bg-[#F7F5EF] flex items-center space-x-1"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Back to Business Info</span>
-                </button>
-
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-lg bg-[#18243A] hover:bg-[#253752] text-[#E7B84B] font-bold text-xs flex items-center space-x-2 transition-all shadow-xs"
-                >
-                  <span>Next: Detail Your Need</span>
-                  <ArrowRight className="w-4 h-4 text-[#E7B84B]" />
-                </button>
+              <div className="pt-3 border-t flex items-center justify-between">
+                <Button type="button" variant="outline" onClick={() => setPhase('initial_info')}>
+                  <ArrowLeft data-icon="inline-start" />
+                  Back to Business Info
+                </Button>
+                <Button type="submit">
+                  Next: Detail Your Need
+                  <ArrowRight data-icon="inline-end" />
+                </Button>
               </div>
             </form>
           )}
 
-          {/* ========================================================================= */}
-          {/* PHASE 3: AGENT NEED INTAKE (Item, Quantity, PRICE RANGE: Min - Max)       */}
-          {/* ========================================================================= */}
+          {/* PHASE 3: AGENT NEED INTAKE */}
           {phase === 'agent_need' && (
             <form onSubmit={handleNeedSubmit} className="space-y-5">
-              {/* Agent Message Bubble */}
-              <div className="p-4 rounded-xl bg-[#18243A] text-white flex items-start space-x-3 shadow-xs">
-                <div className="w-8 h-8 rounded-lg bg-[#E7B84B] text-[#18243A] flex items-center justify-center shrink-0">
-                  <Bot className="w-5 h-5 text-[#18243A]" />
-                </div>
-                <div className="space-y-1 text-xs">
-                  <span className="font-bold text-[#E7B84B]">Cyclewise Agent:</span>
-                  <p className="text-[#E2E8F0] leading-relaxed">
-                    {primaryLanguage === 'sw' || primaryLanguage === 'mixed_sw_en'
-                      ? `Safi sana! Sasa, ni kitu gani ${businessName} inahitaji sana kwa haraka ili uweze kuendeleza biashara bila kuchukua mikopo ya faida kubwa? Weka jina la bidhaa/huduma, kiwango, na makadirio ya masafa ya bei (Price Range: Min - Max KES).`
-                      : `Excellent! Now, what critical input or service does ${businessName} urgently need to keep operating smoothly without expensive cash loans? Please specify the item, quantity, and your acceptable price range (Min KES - Max KES).`}
-                  </p>
-                </div>
-              </div>
+              {agentBubble(
+                primaryLanguage === 'sw' || primaryLanguage === 'mixed_sw_en'
+                  ? `Safi sana! Sasa, ni kitu gani ${businessName} inahitaji sana kwa haraka ili uweze kuendeleza biashara bila kuchukua mikopo ya faida kubwa? Weka jina la bidhaa/huduma, kiwango, na makadirio ya masafa ya bei (Price Range: Min - Max KES).`
+                  : `Excellent! Now, what critical input or service does ${businessName} urgently need to keep operating smoothly without expensive cash loans? Please specify the item, quantity, and your acceptable price range (Min KES - Max KES).`
+              )}
 
-              <div className="p-4 rounded-xl bg-[#F7F5EF] border border-[#EBE7DC] space-y-4 text-xs">
-                <div className="space-y-1">
-                  <label className="font-bold text-[#18243A] flex items-center space-x-1.5">
-                    <Boxes className="w-3.5 h-3.5 text-[#D8783D]" />
-                    <span>1. Needed Item / Service *</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={needItem}
-                    onChange={(e) => setNeedItem(e.target.value)}
-                    placeholder="e.g. Food-grade corrugated packaging cartons"
-                    required
-                    className="w-full px-3 py-2.5 rounded-lg border border-[#E3E0D7] focus:outline-hidden focus:border-[#18243A] text-xs bg-white"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="font-bold text-[#18243A]">2. Required Quantity *</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={needQty}
-                      onChange={(e) => setNeedQty(Number(e.target.value))}
-                      required
-                      className="w-full px-3 py-2 rounded-lg border border-[#E3E0D7] text-xs bg-white"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-bold text-[#18243A]">Unit of Measure *</label>
-                    <input
-                      type="text"
-                      value={needUnit}
-                      onChange={(e) => setNeedUnit(e.target.value)}
-                      placeholder="e.g. boxes, cartons, trips, hours"
-                      required
-                      className="w-full px-3 py-2 rounded-lg border border-[#E3E0D7] text-xs bg-white"
-                    />
-                  </div>
-                </div>
-
-                {/* 3. PRICE RANGE (Min - Max) */}
-                <div className="space-y-2 p-3.5 rounded-lg bg-white border border-[#E3E0D7]">
-                  <label className="font-bold text-[#18243A] flex items-center justify-between">
-                    <span className="flex items-center space-x-1">
-                      <DollarSign className="w-3.5 h-3.5 text-[#D8783D]" />
-                      <span>3. Acceptable Price Range (KES) *</span>
-                    </span>
-                    <span className="text-[10px] text-[#68727D] font-normal">No single rigid price</span>
-                  </label>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-[#68727D] block">Min Range (KES)</span>
-                      <input
-                        type="number"
-                        min={500}
-                        step={500}
-                        value={needPriceMin}
-                        onChange={(e) => setNeedPriceMin(Number(e.target.value))}
+              <Card size="sm">
+                <CardContent>
+                  <FieldGroup>
+                    <Field>
+                      <FieldLabel htmlFor="need-item">
+                        <Boxes className="size-3.5 text-(--color-burnt-orange)" />
+                        1. Needed Item / Service *
+                      </FieldLabel>
+                      <Input
+                        id="need-item"
+                        value={needItem}
+                        onChange={(e) => setNeedItem(e.target.value)}
+                        placeholder="e.g. Food-grade corrugated packaging cartons"
                         required
-                        className="w-full px-3 py-2 rounded-lg border border-[#E3E0D7] text-xs font-semibold text-[#18243A]"
                       />
+                    </Field>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Field>
+                        <FieldLabel htmlFor="need-qty">2. Required Quantity *</FieldLabel>
+                        <Input
+                          id="need-qty"
+                          type="number"
+                          min={1}
+                          value={needQty}
+                          onChange={(e) => setNeedQty(Number(e.target.value))}
+                          required
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="need-unit">Unit of Measure *</FieldLabel>
+                        <Input
+                          id="need-unit"
+                          value={needUnit}
+                          onChange={(e) => setNeedUnit(e.target.value)}
+                          placeholder="e.g. boxes, cartons, trips, hours"
+                          required
+                        />
+                      </Field>
                     </div>
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-[#68727D] block">Max Range (KES)</span>
-                      <input
-                        type="number"
-                        min={500}
-                        step={500}
-                        value={needPriceMax}
-                        onChange={(e) => setNeedPriceMax(Number(e.target.value))}
-                        required
-                        className="w-full px-3 py-2 rounded-lg border border-[#E3E0D7] text-xs font-semibold text-[#18243A]"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="flex items-center justify-between pt-2 text-[11px] text-[#68727D] border-t border-[#EFECE4]">
-                    <span>Average Estimated Budget:</span>
-                    <span className="font-bold text-[#18243A]">
-                      KES {Math.round((needPriceMin + needPriceMax) / 2).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                    <Card size="sm">
+                      <CardContent className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs flex items-center gap-1">
+                            <DollarSign className="size-3.5 text-(--color-burnt-orange)" />
+                            3. Acceptable Price Range (KES) *
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">No single rigid price</span>
+                        </div>
 
-              <div className="pt-3 border-t border-[#EFECE4] flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setPhase('agent_surplus')}
-                  className="px-3.5 py-2 rounded-lg border border-[#E3E0D7] text-xs font-semibold text-[#68727D] hover:bg-[#F7F5EF] flex items-center space-x-1"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Back to Surplus</span>
-                </button>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Field>
+                            <FieldLabel htmlFor="need-price-min" className="text-[10px] text-muted-foreground">Min Range (KES)</FieldLabel>
+                            <Input
+                              id="need-price-min"
+                              type="number"
+                              min={500}
+                              step={500}
+                              value={needPriceMin}
+                              onChange={(e) => setNeedPriceMin(Number(e.target.value))}
+                              required
+                              className="font-semibold"
+                            />
+                          </Field>
+                          <Field>
+                            <FieldLabel htmlFor="need-price-max" className="text-[10px] text-muted-foreground">Max Range (KES)</FieldLabel>
+                            <Input
+                              id="need-price-max"
+                              type="number"
+                              min={500}
+                              step={500}
+                              value={needPriceMax}
+                              onChange={(e) => setNeedPriceMax(Number(e.target.value))}
+                              required
+                              className="font-semibold"
+                            />
+                          </Field>
+                        </div>
 
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-lg bg-[#18243A] hover:bg-[#253752] text-[#E7B84B] font-bold text-xs flex items-center space-x-2 transition-all shadow-xs"
-                >
-                  <span>Next: Business Description</span>
-                  <ArrowRight className="w-4 h-4 text-[#E7B84B]" />
-                </button>
+                        <div className="flex items-center justify-between pt-2 text-[11px] text-muted-foreground border-t">
+                          <span>Average Estimated Budget:</span>
+                          <span className="font-bold text-foreground">
+                            KES {Math.round((needPriceMin + needPriceMax) / 2).toLocaleString()}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </FieldGroup>
+                </CardContent>
+              </Card>
+
+              <div className="pt-3 border-t flex items-center justify-between">
+                <Button type="button" variant="outline" onClick={() => setPhase('agent_surplus')}>
+                  <ArrowLeft data-icon="inline-start" />
+                  Back to Surplus
+                </Button>
+                <Button type="submit">
+                  Next: Business Description
+                  <ArrowRight data-icon="inline-end" />
+                </Button>
               </div>
             </form>
           )}
 
-          {/* ========================================================================= */}
-          {/* PHASE 4: OPTION TO ADD DESCRIPTION OF BUSINESS TO AGENT                   */}
-          {/* ========================================================================= */}
+          {/* PHASE 4: DESCRIPTION */}
           {phase === 'agent_description' && (
             <div className="space-y-5">
-              {/* Agent Message Bubble */}
-              <div className="p-4 rounded-xl bg-[#18243A] text-white flex items-start space-x-3 shadow-xs">
-                <div className="w-8 h-8 rounded-lg bg-[#E7B84B] text-[#18243A] flex items-center justify-center shrink-0">
-                  <Bot className="w-5 h-5 text-[#18243A]" />
-                </div>
-                <div className="space-y-1 text-xs">
-                  <span className="font-bold text-[#E7B84B]">Cyclewise Agent:</span>
-                  <p className="text-[#E2E8F0] leading-relaxed">
-                    {primaryLanguage === 'sw' || primaryLanguage === 'mixed_sw_en'
-                      ? `Je, ungependa kuongeza maelezo mafupi kuhusu operesheni zako, ratiba ya delivery, au viwango vya ubora kwa ${businessName}? Hii husaidia kuongeza alama ya uaminifu (Trust Score) kwenye mtandao.`
-                      : `Would you like to add any operational details, fulfillment preferences, or quality standards for ${businessName}? This is optional, but helps increase your match percentage and verification trust score.`}
-                  </p>
-                </div>
-              </div>
+              {agentBubble(
+                primaryLanguage === 'sw' || primaryLanguage === 'mixed_sw_en'
+                  ? `Je, ungependa kuongeza maelezo mafupi kuhusu operesheni zako, ratiba ya delivery, au viwango vya ubora kwa ${businessName}? Hii husaidia kuongeza alama ya uaminifu (Trust Score) kwenye mtandao.`
+                  : `Would you like to add any operational details, fulfillment preferences, or quality standards for ${businessName}? This is optional, but helps increase your match percentage and verification trust score.`
+              )}
 
-              <div className="p-4 rounded-xl bg-[#F7F5EF] border border-[#EBE7DC] space-y-3 text-xs">
-                <label className="font-bold text-[#18243A] flex items-center justify-between">
-                  <span className="flex items-center space-x-1.5">
-                    <FileText className="w-3.5 h-3.5 text-[#18243A]" />
-                    <span>Business Description & Operational Notes (Optional)</span>
-                  </span>
-                  <span className="text-[10px] text-[#68727D] font-normal">Optional</span>
-                </label>
-                <textarea
-                  rows={3}
-                  value={businessDescription}
-                  onChange={(e) => setBusinessDescription(e.target.value)}
-                  placeholder="e.g. We bake daily from 4 AM with certified food hygiene. We can dispatch via courier by 10 AM daily to Eastleigh, Westlands, or CBD."
-                  className="w-full p-3 rounded-lg border border-[#E3E0D7] focus:outline-hidden focus:border-[#18243A] text-xs bg-white leading-relaxed"
-                />
+              <Card size="sm">
+                <CardContent className="space-y-3">
+                  <Field>
+                    <FieldLabel htmlFor="business-description" className="justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <FileText className="size-3.5" />
+                        Business Description &amp; Operational Notes
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-normal">Optional</span>
+                    </FieldLabel>
+                    <Textarea
+                      id="business-description"
+                      rows={3}
+                      value={businessDescription}
+                      onChange={(e) => setBusinessDescription(e.target.value)}
+                      placeholder="e.g. We bake daily from 4 AM with certified food hygiene. We can dispatch via courier by 10 AM daily to Eastleigh, Westlands, or CBD."
+                    />
+                  </Field>
 
-                {/* Summary Card Before Execution */}
-                <div className="bg-white p-3.5 rounded-lg border border-[#E3E0D7] space-y-2 text-xs">
-                  <span className="font-bold text-[#18243A] block">Intake Overview for {businessName}:</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                    <div className="p-2 rounded-md bg-[#EAF5F0] border border-[#C6E7D7]">
-                      <span className="font-bold text-[#2E8B68] block">You Offer:</span>
-                      <span>{offerQty} {offerUnit} &bull; {offerItem}</span>
-                      <strong className="block text-[#18243A]">Valuation: KES {offerPrice.toLocaleString()}</strong>
-                    </div>
-                    <div className="p-2 rounded-md bg-[#FFF7ED] border border-[#FED7AA]">
-                      <span className="font-bold text-[#D8783D] block">You Need:</span>
-                      <span>{needQty} {needUnit} &bull; {needItem}</span>
-                      <strong className="block text-[#18243A]">Range: KES {needPriceMin.toLocaleString()} - {needPriceMax.toLocaleString()}</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                  <Card size="sm">
+                    <CardContent className="space-y-2">
+                      <span className="font-bold text-xs block">Intake Overview for {businessName}:</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                        <div className="p-2 rounded-md bg-(--color-leaf-green)/10 border border-(--color-leaf-green)/20">
+                          <span className="font-bold text-(--color-leaf-green) block">You Offer:</span>
+                          <span>{offerQty} {offerUnit} &bull; {offerItem}</span>
+                          <strong className="block">Valuation: KES {offerPrice.toLocaleString()}</strong>
+                        </div>
+                        <div className="p-2 rounded-md bg-(--color-burnt-orange)/10 border border-(--color-burnt-orange)/20">
+                          <span className="font-bold text-(--color-burnt-orange) block">You Need:</span>
+                          <span>{needQty} {needUnit} &bull; {needItem}</span>
+                          <strong className="block">Range: KES {needPriceMin.toLocaleString()} - {needPriceMax.toLocaleString()}</strong>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </CardContent>
+              </Card>
 
-              <div className="pt-3 border-t border-[#EFECE4] flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setPhase('agent_need')}
-                  className="px-3.5 py-2 rounded-lg border border-[#E3E0D7] text-xs font-semibold text-[#68727D] hover:bg-[#F7F5EF] flex items-center space-x-1"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Back to Need</span>
-                </button>
-
-                <button
+              <div className="pt-3 border-t flex items-center justify-between">
+                <Button type="button" variant="outline" onClick={() => setPhase('agent_need')}>
+                  <ArrowLeft data-icon="inline-start" />
+                  Back to Need
+                </Button>
+                <Button
                   type="button"
                   onClick={handleExecuteAgentMatching}
                   disabled={isProcessing}
-                  className="px-5 py-2.5 rounded-lg bg-[#2E8B68] hover:bg-[#257356] text-white font-bold text-xs flex items-center space-x-2 transition-all shadow-xs disabled:opacity-50"
+                  className="bg-(--color-leaf-green) text-white hover:bg-(--color-leaf-green)/90"
                 >
                   {isProcessing ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Computing Graph Cycles...</span>
+                      <RefreshCw data-icon="inline-start" className="animate-spin" />
+                      Finding matches...
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-4 h-4 text-[#E7B84B]" />
-                      <span>Discover Closed Loops & Match %</span>
+                      <Sparkles data-icon="inline-start" />
+                      Find My Matches
                     </>
                   )}
-                </button>
+                </Button>
               </div>
             </div>
           )}
 
-          {/* ========================================================================= */}
-          {/* PHASE 5: AGENT MATCHING & DISPATCH MANIFEST ("What Sends to What")        */}
-          {/* ========================================================================= */}
+          {/* PHASE 5: MATCHING RESULTS */}
           {phase === 'agent_matching' && (
             <div className="space-y-5">
-              {/* Top Result Banner with Match Percentage */}
-              <div className="bg-[#18243A] rounded-xl p-4 sm:p-5 text-white shadow-xs space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-7 h-7 rounded-lg bg-[#2E8B68] text-white flex items-center justify-center font-bold">
-                      ✓
+              <Card className="bg-primary text-primary-foreground border-none">
+                <CardContent className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-7 items-center justify-center rounded-lg bg-(--color-leaf-green) text-white font-bold">
+                        <Check className="size-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm">{businessName} added successfully</h4>
+                        <span className="text-xs text-primary-foreground/70">You&apos;re now visible to other businesses in the network</span>
+                      </div>
+                    </div>
+
+                    <Badge variant="secondary" className="gap-1">
+                      <Percent className="size-3.5" />
+                      {matchPercentage}% Compatibility Score
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-primary-foreground/15 text-xs">
+                    <div>
+                      <span className="text-primary-foreground/70 block text-[10px]">Cycles Found:</span>
+                      <span className="font-bold">{discoveredCycles.length} Closed Loops</span>
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-white">{businessName} Successfully Registered</h4>
-                      <span className="text-xs text-[#A6B2C3]">Node verified in Nairobi SME Exchange Graph</span>
+                      <span className="text-primary-foreground/70 block text-[10px]">Unlocked Value:</span>
+                      <span className="font-bold">KES {bestMatch?.estimated_value_unlocked.toLocaleString() || '72,000'}</span>
+                    </div>
+                    <div>
+                      <span className="text-primary-foreground/70 block text-[10px]">Cash Debt Created:</span>
+                      <span className="font-bold">KES 0 (Zero-Debt)</span>
+                    </div>
+                    <div>
+                      <span className="text-primary-foreground/70 block text-[10px]">Escrow Release:</span>
+                      <span className="font-bold">Simultaneous</span>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
 
-                  <div className="flex items-center space-x-2">
-                    <div className="px-3 py-1 rounded-full bg-[#E7B84B]/20 border border-[#E7B84B]/40 text-[#E7B84B] text-xs font-bold flex items-center space-x-1">
-                      <Percent className="w-3.5 h-3.5" />
-                      <span>{matchPercentage}% Compatibility Score</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[#253654] text-xs">
-                  <div>
-                    <span className="text-[#A6B2C3] block text-[10px]">Cycles Found:</span>
-                    <span className="font-bold text-[#E7B84B]">{discoveredCycles.length} Closed Loops</span>
-                  </div>
-                  <div>
-                    <span className="text-[#A6B2C3] block text-[10px]">Unlocked Value:</span>
-                    <span className="font-bold text-[#85E2BD]">
-                      KES {bestMatch?.estimated_value_unlocked.toLocaleString() || '72,000'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[#A6B2C3] block text-[10px]">Cash Debt Created:</span>
-                    <span className="font-bold text-white">KES 0 (Zero-Debt)</span>
-                  </div>
-                  <div>
-                    <span className="text-[#A6B2C3] block text-[10px]">Escrow Release:</span>
-                    <span className="font-bold text-[#85E2BD]">Simultaneous</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* What Business Sends to What Business Dispatch Manifest */}
               {bestMatch && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#68727D] flex items-center space-x-1.5">
-                      <Truck className="w-3.5 h-3.5 text-[#18243A]" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Truck className="size-3.5" />
                       <span>Dispatch Manifest: What Business Sends to Which Business</span>
                     </h4>
-                    <span className="text-[10px] text-[#2E8B68] font-bold bg-[#EAF5F0] px-2 py-0.5 rounded-md">
+                    <Badge variant="outline" className="border-(--color-leaf-green)/30 bg-(--color-leaf-green)/10 text-(--color-leaf-green) text-[10px]">
                       {bestMatch.cycle_length}-Way Reciprocal Chain
-                    </span>
+                    </Badge>
                   </div>
 
                   <div className="space-y-2">
@@ -896,70 +819,59 @@ export const SmeOnboardingModal: React.FC<SmeOnboardingModalProps> = ({
                       const isUserEdge = edge.from_sme_id.includes(businessName.toLowerCase().slice(0, 4)) || edge.to_sme_id.includes(businessName.toLowerCase().slice(0, 4));
 
                       return (
-                        <div
+                        <Card
                           key={edge.id}
-                          className={`p-3 rounded-lg border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all ${
-                            isUserEdge
-                              ? 'bg-[#FEFCE8] border-[#E7B84B] shadow-2xs'
-                              : 'bg-[#F7F5EF] border-[#E3E0D7]'
-                          }`}
+                          size="sm"
+                          className={isUserEdge ? 'border-(--color-maize-gold) bg-(--color-maize-gold)/10' : ''}
                         >
-                          <div className="flex items-center space-x-2 min-w-[140px]">
-                            <span className="w-5 h-5 rounded-full bg-[#18243A] text-white flex items-center justify-center font-bold text-[10px]">
-                              {idx + 1}
-                            </span>
-                            <div>
-                              <span className="font-bold text-[#18243A] block">{edge.from_sme_id}</span>
-                              <span className="text-[10px] text-[#68727D]">Origin Sender</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center space-x-2 flex-1 px-1">
-                            <ArrowRight className="w-3.5 h-3.5 text-[#E7B84B] shrink-0" />
-                            <div className="bg-white p-2 rounded-md border border-[#E3E0D7] flex-1">
-                              <span className="font-semibold text-[#18243A] block">{edge.item_or_service}</span>
-                              <span className="text-[10px] text-[#2E8B68] font-semibold">
-                                Qty: {edge.quantity} {edge.unit} &bull; KES {edge.estimated_value.toLocaleString()}
+                          <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                            <div className="flex items-center gap-2 min-w-[140px]">
+                              <span className="flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px]">
+                                {idx + 1}
                               </span>
+                              <div>
+                                <span className="font-bold block">{edge.from_sme_id}</span>
+                                <span className="text-[10px] text-muted-foreground">Origin Sender</span>
+                              </div>
                             </div>
-                            <ArrowRight className="w-3.5 h-3.5 text-[#E7B84B] shrink-0" />
-                          </div>
 
-                          <div className="min-w-[120px] text-right sm:text-right">
-                            <span className="text-[10px] text-[#68727D] block">Delivered To:</span>
-                            <span className="font-bold text-[#18243A]">{edge.to_sme_id}</span>
-                          </div>
-                        </div>
+                            <div className="flex items-center gap-2 flex-1 px-1">
+                              <ArrowRight className="size-3.5 text-(--color-maize-gold) shrink-0" />
+                              <div className="bg-background p-2 rounded-md border flex-1">
+                                <span className="font-semibold block">{edge.item_or_service}</span>
+                                <span className="text-[10px] text-(--color-leaf-green) font-semibold">
+                                  Qty: {edge.quantity} {edge.unit} &bull; KES {edge.estimated_value.toLocaleString()}
+                                </span>
+                              </div>
+                              <ArrowRight className="size-3.5 text-(--color-maize-gold) shrink-0" />
+                            </div>
+
+                            <div className="min-w-[120px] text-right">
+                              <span className="text-[10px] text-muted-foreground block">Delivered To:</span>
+                              <span className="font-bold">{edge.to_sme_id}</span>
+                            </div>
+                          </CardContent>
+                        </Card>
                       );
                     })}
                   </div>
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="pt-3 border-t border-[#EFECE4] flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setPhase('agent_description')}
-                  className="px-3.5 py-2 rounded-lg border border-[#E3E0D7] text-xs font-semibold text-[#68727D] hover:bg-[#F7F5EF] flex items-center space-x-1"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Adjust Details</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleFinalConfirm}
-                  className="px-5 py-2.5 rounded-lg bg-[#18243A] hover:bg-[#253752] text-[#E7B84B] font-bold text-xs flex items-center space-x-2 transition-all shadow-md"
-                >
-                  <span>Accept & View Matched Exchanges</span>
-                  <ArrowRight className="w-4 h-4 text-[#E7B84B]" />
-                </button>
+              <div className="pt-3 border-t flex items-center justify-between">
+                <Button type="button" variant="outline" onClick={() => setPhase('agent_description')}>
+                  <ArrowLeft data-icon="inline-start" />
+                  Adjust Details
+                </Button>
+                <Button type="button" onClick={handleFinalConfirm}>
+                  Accept &amp; View Matched Exchanges
+                  <ArrowRight data-icon="inline-end" />
+                </Button>
               </div>
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };

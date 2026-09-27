@@ -3,7 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 export interface ModelProviderInfo {
   id: string;
   name: string;
-  provider: 'nvidia' | 'google' | 'local';
+  provider: 'nvidia' | 'google' | 'anthropic' | 'local';
   model_name: string;
   is_configured: boolean;
   is_active: boolean;
@@ -26,6 +26,8 @@ export class MultiModelRouter {
   private nvidiaApiKey: string | null = null;
   private nvidiaBaseUrl: string = 'https://integrate.api.nvidia.com/v1';
   private nvidiaModel: string = 'nvidia/nemotron-3-super-120b';
+  private anthropicApiKey: string | null = null;
+  private anthropicModel: string = 'claude-sonnet-5';
 
   // Failsafe Gemini models in priority order
   private geminiFailsafeModels = [
@@ -66,6 +68,15 @@ export class MultiModelRouter {
       } catch (e) {
         console.warn('[MultiModelRouter] Gemini init error:', e);
       }
+    }
+
+    // 3. Anthropic Claude Configuration
+    this.anthropicApiKey =
+      process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'MY_ANTHROPIC_API_KEY'
+        ? process.env.ANTHROPIC_API_KEY
+        : null;
+    if (process.env.ANTHROPIC_MODEL) {
+      this.anthropicModel = process.env.ANTHROPIC_MODEL;
     }
   }
 
@@ -122,12 +133,22 @@ export class MultiModelRouter {
         description: 'Deep complex multi-hop trade reasoning failsafe',
       },
       {
+        id: 'anthropic-claude',
+        name: 'Anthropic Claude Sonnet 5',
+        provider: 'anthropic',
+        model_name: this.anthropicModel,
+        is_configured: !!this.anthropicApiKey,
+        is_active: !this.nvidiaApiKey && !this.geminiClient && !!this.anthropicApiKey,
+        tier: 'secondary',
+        description: 'High-fidelity reasoning and grounded multilingual explanation via Anthropic API',
+      },
+      {
         id: 'local-deterministic',
         name: 'Deterministic Grounded Engine',
         provider: 'local',
         model_name: 'cyclewise-dfs-v1',
         is_configured: true,
-        is_active: !this.nvidiaApiKey && !this.geminiClient,
+        is_active: !this.nvidiaApiKey && !this.geminiClient && !this.anthropicApiKey,
         tier: 'fallback',
         description: 'Pure deterministic constraint and DFS cycle validator',
       },
@@ -152,8 +173,8 @@ export class MultiModelRouter {
       providersToTry.push(preferredProvider);
     }
 
-    // Default cascade: NVIDIA Nemotron -> Google Gemini Flash -> Google Gemini Failsafes
-    ['nvidia-nemotron', 'google-gemini-flash'].forEach((p) => {
+    // Default cascade: NVIDIA Nemotron -> Google Gemini Flash -> Anthropic Claude -> Google Gemini Failsafes
+    ['nvidia-nemotron', 'google-gemini-flash', 'anthropic-claude'].forEach((p) => {
       if (!providersToTry.includes(p)) {
         providersToTry.push(p);
       }
@@ -221,6 +242,26 @@ export class MultiModelRouter {
             cascadeTrail.push(`${geminiModel} (Google GenAI) -> Failed: ${err.message || 'Error'}`);
             console.warn(`[MultiModelRouter] Gemini ${geminiModel} failed, trying next Gemini failsafe model:`, err.message);
           }
+        }
+      }
+
+      // 3. Anthropic Claude execution
+      if (provider === 'anthropic-claude' && this.anthropicApiKey) {
+        try {
+          const res = await this.callAnthropicChat(systemPrompt, userPrompt, this.anthropicModel);
+          cascadeTrail.push(`${this.anthropicModel} (Anthropic API) -> Success`);
+          return {
+            raw_text: res,
+            json_data: this.tryParseJson(res),
+            model_used: this.anthropicModel,
+            provider: 'anthropic',
+            fallback_used: cascadeTrail.length > 1,
+            cascade_trail: cascadeTrail,
+            latency_ms: Math.round(performance.now() - startTime),
+          };
+        } catch (err: any) {
+          cascadeTrail.push(`${this.anthropicModel} (Anthropic API) -> Failed: ${err.message || 'Error'}`);
+          console.warn('[MultiModelRouter] Anthropic Claude failed, continuing cascade:', err.message);
         }
       }
     }
@@ -296,6 +337,45 @@ export class MultiModelRouter {
 
       const json = await response.json();
       return json?.choices?.[0]?.message?.content || '';
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async callAnthropicChat(
+    systemPrompt: string,
+    userPrompt: string,
+    modelName: string = this.anthropicModel
+  ): Promise<string> {
+    if (!this.anthropicApiKey) throw new Error('Anthropic API key not configured');
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.anthropicApiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: modelName,
+          max_tokens: 1500,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error(`Anthropic API HTTP ${response.status}: ${errText.slice(0, 150)}`);
+      }
+
+      const json = await response.json();
+      return json?.content?.[0]?.text || '';
     } finally {
       clearTimeout(timeout);
     }

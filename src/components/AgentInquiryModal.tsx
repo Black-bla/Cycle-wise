@@ -1,6 +1,24 @@
 import React, { useState } from 'react';
 import { ExchangeCycle, SMEProfile } from '../agent/types';
-import { Bot, Sparkles, Send, X, ShieldCheck, AlertCircle, ArrowRight, CornerDownLeft, RefreshCw, MessageSquare } from 'lucide-react';
+import { Bot, Send, ShieldCheck, RefreshCw } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  MessageScroller,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@/components/ui/message-scroller';
+import { Message, MessageContent, MessageHeader } from '@/components/ui/message';
+import { Bubble, BubbleContent } from '@/components/ui/bubble';
 
 interface AgentInquiryModalProps {
   isOpen: boolean;
@@ -15,29 +33,22 @@ export const AgentInquiryModal: React.FC<AgentInquiryModalProps> = ({
   onClose,
   cycle,
   smes,
-  onRunSubstitute,
 }) => {
   const [question, setQuestion] = useState('');
-  const [modelPreference, setModelPreference] = useState<string>('auto');
+  const modelPreference = 'auto';
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Array<{
     sender: 'user' | 'agent';
     text: string;
-    model?: string;
-    durationMs?: number;
     risk?: string;
-    citations?: string[];
   }>>([
     {
       sender: 'agent',
       text: cycle
-        ? `Jambo! I am Cyclewise AI Coordinator with NVIDIA Nemotron & Gemini multi-model routing. I have verified facts for this ${cycle.cycle_length}-business rescue loop (KES ${cycle.estimated_value_unlocked.toLocaleString()} unlocked). You can ask me how delivery works, how parity is calculated, how participants are protected, or ask questions in English, Kiswahili, or Sheng.`
-        : 'Jambo! I am Cyclewise AI Coordinator with NVIDIA Nemotron & Gemini routing. Ask me any question about the SME exchange network, trust verification, or how reciprocal barter loops prevent debt.',
-      citations: ['Cyclewise Verified Graph Engine', 'National Registry Verification'],
+        ? `Jambo! Ask me anything about this trade — how delivery works, how the value was split, or what happens if someone backs out. English, Kiswahili, or Sheng all work.`
+        : 'Jambo! Ask me anything about how Cyclewise trades work, or how businesses are verified.',
     },
   ]);
-
-  if (!isOpen) return null;
 
   const quickQuestions = [
     { label: 'Why no debt?', q: 'How does this cycle protect SMEs from emergency cash loans or bad debt?' },
@@ -75,10 +86,7 @@ export const AgentInquiryModal: React.FC<AgentInquiryModalProps> = ({
         {
           sender: 'agent',
           text: data.answer,
-          model: data.model_used,
-          durationMs: data.duration_ms,
           risk: data.risk_assessment,
-          citations: data.grounded_citations,
         },
       ]);
     } catch (err: unknown) {
@@ -97,157 +105,100 @@ export const AgentInquiryModal: React.FC<AgentInquiryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
-      <div className="bg-[#FAF9F5] border border-[#E3E0D7] rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        
-        {/* Header */}
-        <div className="p-4 sm:p-5 bg-[#18243A] text-white flex items-center justify-between border-b border-[#253654]">
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-[#233554] border border-[#E7B84B]/30 flex items-center justify-center text-[#E7B84B]">
-              <Bot className="w-5 h-5 text-[#E7B84B]" />
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="p-4 sm:p-5 bg-primary text-primary-foreground gap-1">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-primary-foreground/10 text-primary-foreground">
+              <Bot className="size-5" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h3 className="font-bold text-sm text-white">Cyclewise AI Coordinator</h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#2E8B68]/30 text-[#86E4B9] font-medium border border-[#2E8B68]/40">
-                  Gemini Grounded Agent
-                </span>
-              </div>
-              <p className="text-xs text-[#A6B2C3]">
-                Strict Grounding &bull; Multilingual EN / SW / Sheng &bull; Zero Fake Data
-              </p>
+              <DialogTitle className="text-primary-foreground">Ask About This Trade</DialogTitle>
+              <DialogDescription className="text-primary-foreground/70">
+                Answers only use facts from this exchange — nothing made up.
+              </DialogDescription>
             </div>
           </div>
+        </DialogHeader>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-[#A6B2C3] hover:text-white hover:bg-[#253752] transition-colors"
-            aria-label="Close Agent modal"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Cycle context bar if cycle is present */}
         {cycle && (
-          <div className="bg-[#EFECE4] px-4 py-2 border-b border-[#E3E0D7] flex flex-wrap items-center justify-between text-xs gap-1">
-            <div className="flex items-center gap-1.5 text-[#18243A]">
-              <span className="font-bold">Active Context:</span>
-              <span>{cycle.cycle_length}-SME Loop (KES {cycle.estimated_value_unlocked.toLocaleString()})</span>
-            </div>
-            <div className="text-[11px] text-[#68727D]">
-              Participants: {cycle.sme_sequence.map((id) => smes.get(id)?.name || id).join(' → ')}
-            </div>
+          <div className="bg-muted px-4 py-2 border-b text-xs">
+            <span className="text-muted-foreground">
+              This trade: {cycle.sme_sequence.map((id) => smes.get(id)?.name || id).join(' → ')}
+            </span>
           </div>
         )}
 
-        {/* Conversation transcript */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 text-xs">
-          {messages.map((m, idx) => (
-            <div
-              key={idx}
-              className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}
-            >
-              <div
-                className={`max-w-[85%] rounded-2xl p-3 sm:p-3.5 space-y-1.5 ${
-                  m.sender === 'user'
-                    ? 'bg-[#18243A] text-white rounded-br-xs'
-                    : 'bg-white border border-[#E3E0D7] text-[#17202A] rounded-bl-xs shadow-xs'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-3 text-[10px] pb-1 border-b border-black/5">
-                  <span className={`font-semibold ${m.sender === 'user' ? 'text-[#E7B84B]' : 'text-[#68727D]'}`}>
-                    {m.sender === 'user' ? 'You (SME Owner)' : 'Cyclewise Agent (Gemini)'}
-                  </span>
-                  {m.durationMs !== undefined && (
-                    <span className="text-[#68727D] font-mono text-[9px]">
-                      {m.model} &bull; {m.durationMs}ms
-                    </span>
-                  )}
+        <MessageScrollerProvider>
+        <MessageScroller className="flex-1 min-h-[280px]">
+          <MessageScrollerViewport className="px-4 sm:px-5 py-4">
+            <MessageScrollerContent>
+              {messages.map((m, idx) => (
+                <MessageScrollerItem key={idx}>
+                  <Message align={m.sender === 'user' ? 'end' : 'start'}>
+                    <MessageContent>
+                      <MessageHeader>
+                        {m.sender === 'user' ? 'You' : 'Cyclewise'}
+                      </MessageHeader>
+                      <Bubble align={m.sender === 'user' ? 'end' : 'start'} variant={m.sender === 'user' ? 'default' : 'outline'}>
+                        <BubbleContent className="space-y-1.5">
+                          <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
+                          {m.risk && (
+                            <div className="pt-1.5 mt-1 border-t border-current/10 flex items-start gap-1.5 text-[11px] opacity-80">
+                              <ShieldCheck className="size-3.5 shrink-0" />
+                              <span>{m.risk}</span>
+                            </div>
+                          )}
+                        </BubbleContent>
+                      </Bubble>
+                    </MessageContent>
+                  </Message>
+                </MessageScrollerItem>
+              ))}
+
+              {isLoading && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                  <RefreshCw className="size-3.5 animate-spin" />
+                  <span>Thinking...</span>
                 </div>
+              )}
+            </MessageScrollerContent>
+          </MessageScrollerViewport>
+        </MessageScroller>
+        </MessageScrollerProvider>
 
-                <p className="leading-relaxed whitespace-pre-wrap">{m.text}</p>
-
-                {m.risk && (
-                  <div className="pt-1.5 mt-1 border-t border-[#EFECE4] flex items-start space-x-1.5 text-[11px] text-[#D8783D]">
-                    <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-[#2E8B68]" />
-                    <span>Risk Check: {m.risk}</span>
-                  </div>
-                )}
-
-                {m.citations && m.citations.length > 0 && (
-                  <div className="text-[10px] text-[#68727D] pt-1">
-                    Citations: {m.citations.join(' &bull; ')}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {isLoading && (
-            <div className="flex items-center space-x-2 text-xs text-[#68727D] py-2">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#2E8B68]" />
-              <span>Cyclewise Agent is analyzing exchange graph facts with Gemini...</span>
-            </div>
-          )}
-        </div>
-
-        {/* Quick query & Model Selector chips */}
-        <div className="p-2 sm:px-4 bg-[#F2EFE8] border-t border-[#E3E0D7] flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            <span className="text-[#68727D] shrink-0 font-medium text-[10px] uppercase">Ask:</span>
-            {quickQuestions.map((q, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleAsk(q.q)}
-                disabled={isLoading}
-                className="shrink-0 px-2.5 py-1 rounded-full bg-white hover:bg-[#E3E0D7] text-[#18243A] border border-[#D5D1C4] transition-colors"
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-[#68727D]">Model:</span>
-            <select
-              value={modelPreference}
-              onChange={(e) => setModelPreference(e.target.value)}
-              className="px-2 py-0.5 rounded-md border border-[#D5D1C4] bg-white text-[10px] font-semibold text-[#18243A]"
+        <div className="px-3 sm:px-4 py-2 bg-muted border-t flex items-center gap-1.5 overflow-x-auto">
+          {quickQuestions.map((q, idx) => (
+            <Button
+              key={idx}
+              size="xs"
+              variant="secondary"
+              className="shrink-0 rounded-full"
+              disabled={isLoading}
+              onClick={() => handleAsk(q.q)}
             >
-              <option value="auto">Auto Cascade (NVIDIA Nemotron ➔ Gemini Flash ➔ Gemini Failsafe)</option>
-              <option value="nvidia-nemotron">NVIDIA Nemotron 3 Ultra</option>
-              <option value="nvidia-nemotron-70b">NVIDIA Nemotron 70B</option>
-              <option value="google-gemini-flash">Google Gemini 3.8 Flash</option>
-              <option value="google-gemini-lite">Google Gemini 3.1 Flash Lite (Failsafe)</option>
-              <option value="google-gemini-pro">Google Gemini 3.1 Pro (Failsafe)</option>
-            </select>
-          </div>
+              {q.label}
+            </Button>
+          ))}
         </div>
 
-        {/* Input box */}
-        <div className="p-3 sm:p-4 bg-white border-t border-[#E3E0D7] flex items-center space-x-2">
-          <input
-            type="text"
+        <div className="p-3 sm:p-4 bg-background border-t flex items-center gap-2">
+          <Input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleAsk();
             }}
-            placeholder="Uliza chochote kuhusu mzunguko huu (Ask in English, Swahili or Sheng)..."
-            className="flex-1 p-2.5 rounded-xl border border-[#E3E0D7] text-xs sm:text-sm text-[#17202A] focus:ring-2 focus:ring-[#18243A] focus:border-transparent outline-hidden bg-[#FAF9F5]"
+            placeholder="Ask in English, Swahili or Sheng..."
             disabled={isLoading}
+            className="flex-1"
           />
-          <button
-            onClick={() => handleAsk()}
-            disabled={isLoading || !question.trim()}
-            className="px-4 py-2.5 rounded-xl bg-[#18243A] hover:bg-[#253752] text-[#E7B84B] font-semibold text-xs flex items-center space-x-1.5 transition-colors disabled:opacity-50"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Ask Agent</span>
-          </button>
+          <Button onClick={() => handleAsk()} disabled={isLoading || !question.trim()}>
+            <Send data-icon="inline-start" />
+            <span className="hidden sm:inline">Ask</span>
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };

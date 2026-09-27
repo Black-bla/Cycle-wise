@@ -1,15 +1,24 @@
 import React from 'react';
 import { ExchangeCycle, SMEProfile } from '../agent/types';
-import { ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, DollarSign } from 'lucide-react';
+import { ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, DollarSign, Bot, RefreshCw } from 'lucide-react';
 
 interface CycleCardProps {
   cycle: ExchangeCycle;
   smes: Map<string, SMEProfile>;
   onCommit?: (cycleId: string) => void;
   onDecline?: (cycleId: string) => void;
+  onAskAgent?: (cycle: ExchangeCycle) => void;
+  onRequestSubstitute?: (cycleId: string) => void;
 }
 
-export const CycleCard: React.FC<CycleCardProps> = ({ cycle, smes, onCommit, onDecline }) => {
+export const CycleCard: React.FC<CycleCardProps> = ({
+  cycle,
+  smes,
+  onCommit,
+  onDecline,
+  onAskAgent,
+  onRequestSubstitute,
+}) => {
   const getSmeName = (id: string) => smes.get(id)?.name || id;
   const getSmeSector = (id: string) => smes.get(id)?.sector || 'SME';
 
@@ -134,8 +143,28 @@ export const CycleCard: React.FC<CycleCardProps> = ({ cycle, smes, onCommit, onD
           <span>Status: <strong>{cycle.status}</strong> (Pending 4 human confirmations)</span>
         </div>
 
-        <div className="flex items-center space-x-2">
-          {onDecline && (
+        <div className="flex flex-wrap items-center gap-2">
+          {onAskAgent && (
+            <button
+              onClick={() => onAskAgent(cycle)}
+              className="px-3 py-1.5 rounded-md border border-[#18243A]/20 bg-[#F2EFE8] hover:bg-[#E3E0D7] text-xs font-semibold text-[#18243A] transition-colors flex items-center space-x-1"
+            >
+              <Bot className="w-3.5 h-3.5 text-[#18243A]" />
+              <span>Ask Agent Q&A</span>
+            </button>
+          )}
+
+          {onRequestSubstitute && (
+            <button
+              onClick={() => onRequestSubstitute(cycle.id)}
+              className="px-3 py-1.5 rounded-md border border-[#D8783D]/30 bg-[#FFF7ED] text-[#C2652B] hover:bg-[#FFEDD5] text-xs font-medium transition-colors flex items-center space-x-1"
+            >
+              <RefreshCw className="w-3 h-3 text-[#D8783D]" />
+              <span>Find Substitute</span>
+            </button>
+          )}
+
+          {onDecline && !onRequestSubstitute && (
             <button
               onClick={() => onDecline(cycle.id)}
               className="px-3 py-1.5 rounded-md border border-[#E3E0D7] text-xs font-medium text-[#68727D] hover:bg-[#F7F5EF] transition-colors"
@@ -143,6 +172,7 @@ export const CycleCard: React.FC<CycleCardProps> = ({ cycle, smes, onCommit, onD
               Simulate Decline
             </button>
           )}
+
           {onCommit && (
             <button
               onClick={() => onCommit(cycle.id)}

@@ -27,6 +27,7 @@ export interface GraphSearchResult {
 export class DeterministicGraphEngine {
   private smes: Map<string, SMEProfile>;
   private disabledEdges: Set<string> = new Set();
+  private dynamicEdges: DirectedEdge[] = [];
 
   constructor(initialSmes: SMEProfile[] = SEEDED_SMES) {
     this.smes = new Map();
@@ -37,6 +38,11 @@ export class DeterministicGraphEngine {
     this.smes.clear();
     SEEDED_SMES.forEach((s) => this.smes.set(s.id, { ...s }));
     this.disabledEdges.clear();
+    this.dynamicEdges = [];
+  }
+
+  public getSMEs(): Map<string, SMEProfile> {
+    return this.smes;
   }
 
   public disableEdge(fromId: string, toId: string): void {
@@ -45,6 +51,220 @@ export class DeterministicGraphEngine {
 
   public enableEdge(fromId: string, toId: string): void {
     this.disabledEdges.delete(`${fromId}->${toId}`);
+  }
+
+  /**
+   * Register a newly onboarded SME node into the deterministic graph engine
+   * and link compatibility edges with existing Nairobi business nodes.
+   */
+  public addSME(sme: SMEProfile, customEdges?: DirectedEdge[]): DirectedEdge[] {
+    this.smes.set(sme.id, { ...sme });
+    if (customEdges && customEdges.length > 0) {
+      this.dynamicEdges.push(...customEdges);
+      return customEdges;
+    }
+    const generated = this.inferEdgesForNewSme(sme);
+    this.dynamicEdges.push(...generated);
+    return generated;
+  }
+
+  /**
+   * Deterministically infer bidirectional compatibility edges for an onboarded SME
+   */
+  private inferEdgesForNewSme(sme: SMEProfile): DirectedEdge[] {
+    const generated: DirectedEdge[] = [];
+    const needText = (sme.need_summary || '').toLowerCase();
+    const offerText = (sme.offer_summary || '').toLowerCase();
+    const sector = (sme.sector || '').toLowerCase();
+
+    // 1. INWARD EDGES: Who among existing SMEs satisfies what the new SME needs?
+    if (needText.includes('box') || needText.includes('packag') || needText.includes('carton') || needText.includes('wrapper') || needText.includes('container')) {
+      if (this.smes.has('sme-greenpack')) {
+        generated.push({
+          id: `edge_sme-greenpack_${sme.id}`,
+          from_sme_id: 'sme-greenpack',
+          to_sme_id: sme.id,
+          item_or_service: '200 food-grade corrugated packaging boxes',
+          category: 'Packaging',
+          quantity: 200,
+          unit: 'boxes',
+          estimated_value: 18000,
+          compatibility_score: 0.94,
+          explanation: `GreenPack manufactures 200 protective packaging cartons for ${sme.name}.`,
+        });
+      }
+    } else if (needText.includes('deliver') || needText.includes('dispatch') || needText.includes('courier') || needText.includes('transport') || needText.includes('logistics') || needText.includes('rider')) {
+      if (this.smes.has('sme-swiftmove')) {
+        generated.push({
+          id: `edge_sme-swiftmove_${sme.id}`,
+          from_sme_id: 'sme-swiftmove',
+          to_sme_id: sme.id,
+          item_or_service: 'Courier parcel dispatch runs (5 trips)',
+          category: 'Logistics',
+          quantity: 5,
+          unit: 'trips',
+          estimated_value: 17500,
+          compatibility_score: 0.95,
+          explanation: `SwiftMove riders provide reliable scheduled dispatch trips for ${sme.name}.`,
+        });
+      }
+    } else if (needText.includes('bookkeep') || needText.includes('tax') || needText.includes('kra') || needText.includes('account') || needText.includes('ledger') || needText.includes('audit')) {
+      if (this.smes.has('sme-ledgerpro')) {
+        generated.push({
+          id: `edge_sme-ledgerpro_${sme.id}`,
+          from_sme_id: 'sme-ledgerpro',
+          to_sme_id: sme.id,
+          item_or_service: 'Quarterly SME bookkeeping & reconciliations',
+          category: 'Professional Services',
+          quantity: 1,
+          unit: 'quarter',
+          estimated_value: 18500,
+          compatibility_score: 0.93,
+          explanation: `LedgerPro prepares audited records and tax compliance for ${sme.name}.`,
+        });
+      }
+    } else if (needText.includes('print') || needText.includes('label') || needText.includes('card') || needText.includes('flyer') || needText.includes('signage')) {
+      if (this.smes.has('sme-printlab')) {
+        generated.push({
+          id: `edge_sme-printlab_${sme.id}`,
+          from_sme_id: 'sme-printlab',
+          to_sme_id: sme.id,
+          item_or_service: '100 custom printed promotional cards or box labels',
+          category: 'Printing',
+          quantity: 100,
+          unit: 'cards',
+          estimated_value: 8000,
+          compatibility_score: 0.92,
+          explanation: `PrintLab produces custom branding labels for ${sme.name}.`,
+        });
+      }
+    } else if (needText.includes('design') || needText.includes('logo') || needText.includes('brand') || needText.includes('vector') || needText.includes('marketing')) {
+      if (this.smes.has('sme-studio')) {
+        generated.push({
+          id: `edge_sme-studio_${sme.id}`,
+          from_sme_id: 'sme-studio',
+          to_sme_id: sme.id,
+          item_or_service: 'Full brand kit & vector graphic design',
+          category: 'Graphic Design',
+          quantity: 1,
+          unit: 'package',
+          estimated_value: 8500,
+          compatibility_score: 0.94,
+          explanation: `Jirani Studio provides vector brand assets and digital templates for ${sme.name}.`,
+        });
+      }
+    } else {
+      // Default inward edge: GreenPack packaging or SwiftMove courier
+      if (this.smes.has('sme-greenpack')) {
+        generated.push({
+          id: `edge_sme-greenpack_${sme.id}`,
+          from_sme_id: 'sme-greenpack',
+          to_sme_id: sme.id,
+          item_or_service: '200 food-grade corrugated packaging boxes',
+          category: 'Packaging',
+          quantity: 200,
+          unit: 'boxes',
+          estimated_value: 18000,
+          compatibility_score: 0.91,
+          explanation: `GreenPack manufactures sturdy corrugated boxes to fulfill need of ${sme.name}.`,
+        });
+      }
+    }
+
+    // 2. OUTWARD EDGES: Who among existing SMEs can consume what the new SME offers?
+    if (offerText.includes('food') || offerText.includes('bread') || offerText.includes('bakery') || offerText.includes('flour') || offerText.includes('oil') || offerText.includes('produce') || offerText.includes('fruit') || sector.includes('food') || sector.includes('agri')) {
+      if (this.smes.has('sme-ledgerpro')) {
+        generated.push({
+          id: `edge_${sme.id}_sme-ledgerpro`,
+          from_sme_id: sme.id,
+          to_sme_id: 'sme-ledgerpro',
+          item_or_service: sme.offer_summary,
+          category: 'Food Supplies',
+          quantity: 20,
+          unit: 'units',
+          estimated_value: 18000,
+          compatibility_score: 0.95,
+          explanation: `${sme.name} supplies quality provisions to LedgerPro canteen and catering barter.`,
+        });
+      }
+      if (this.smes.has('sme-amina')) {
+        generated.push({
+          id: `edge_${sme.id}_sme-amina`,
+          from_sme_id: sme.id,
+          to_sme_id: 'sme-amina',
+          item_or_service: sme.offer_summary,
+          category: 'Food Wholesale',
+          quantity: 15,
+          unit: 'lots',
+          estimated_value: 17500,
+          compatibility_score: 0.92,
+          explanation: `${sme.name} provides wholesale food inventory to Amina Foods distribution.`,
+        });
+      }
+    } else if (offerText.includes('packag') || offerText.includes('box') || offerText.includes('carton')) {
+      if (this.smes.has('sme-amina')) {
+        generated.push({
+          id: `edge_${sme.id}_sme-amina`,
+          from_sme_id: sme.id,
+          to_sme_id: 'sme-amina',
+          item_or_service: sme.offer_summary,
+          category: 'Packaging',
+          quantity: 200,
+          unit: 'boxes',
+          estimated_value: 18000,
+          compatibility_score: 0.94,
+          explanation: `${sme.name} satisfies Amina's critical packaging container requirement.`,
+        });
+      }
+    } else if (offerText.includes('deliver') || offerText.includes('transport') || offerText.includes('dispatch') || offerText.includes('courier')) {
+      if (this.smes.has('sme-greenpack')) {
+        generated.push({
+          id: `edge_${sme.id}_sme-greenpack`,
+          from_sme_id: sme.id,
+          to_sme_id: 'sme-greenpack',
+          item_or_service: sme.offer_summary,
+          category: 'Logistics',
+          quantity: 5,
+          unit: 'runs',
+          estimated_value: 17500,
+          compatibility_score: 0.93,
+          explanation: `${sme.name} fulfills GreenPack customer dispatch deliveries across Nairobi.`,
+        });
+      }
+    } else if (offerText.includes('design') || offerText.includes('logo') || offerText.includes('creative')) {
+      if (this.smes.has('sme-printlab')) {
+        generated.push({
+          id: `edge_${sme.id}_sme-printlab`,
+          from_sme_id: sme.id,
+          to_sme_id: 'sme-printlab',
+          item_or_service: sme.offer_summary,
+          category: 'Graphic Design',
+          quantity: 1,
+          unit: 'package',
+          estimated_value: 8500,
+          compatibility_score: 0.93,
+          explanation: `${sme.name} provides creative vector assets for PrintLab print customers.`,
+        });
+      }
+    } else {
+      // General outward edge to LedgerPro or Amina
+      if (this.smes.has('sme-ledgerpro')) {
+        generated.push({
+          id: `edge_${sme.id}_sme-ledgerpro`,
+          from_sme_id: sme.id,
+          to_sme_id: 'sme-ledgerpro',
+          item_or_service: sme.offer_summary,
+          category: sme.sector || 'Commercial Supplies',
+          quantity: 1,
+          unit: 'batch',
+          estimated_value: 18000,
+          compatibility_score: 0.91,
+          explanation: `${sme.name} supplies goods/services to LedgerPro client network.`,
+        });
+      }
+    }
+
+    return generated;
   }
 
   /**
@@ -146,6 +366,17 @@ export class DeterministicGraphEngine {
           compatibility_score: c.compat,
           explanation: c.desc,
         });
+      }
+    }
+
+    // Include dynamically inferred edges for newly onboarded SMEs
+    for (const de of this.dynamicEdges) {
+      const key = `${de.from_sme_id}->${de.to_sme_id}`;
+      if (!this.disabledEdges.has(key) && this.smes.has(de.from_sme_id) && this.smes.has(de.to_sme_id)) {
+        // Prevent duplicate edge IDs
+        if (!edges.some((e) => e.id === de.id)) {
+          edges.push(de);
+        }
       }
     }
 

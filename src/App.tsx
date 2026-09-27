@@ -9,18 +9,25 @@ import { ValueUnlockedSummaryCard } from './components/ValueUnlockedSummaryCard'
 import { EvidencePanel } from './components/EvidencePanel';
 import { ExchangesTracker } from './components/ExchangesTracker';
 import { HackathonRubricModal } from './components/HackathonRubricModal';
+import { AgentCommandCenterModal } from './components/AgentCommandCenterModal';
+import { AgentInquiryModal } from './components/AgentInquiryModal';
+import { SmeOnboardingModal } from './components/SmeOnboardingModal';
 import { DeterministicGraphEngine, GraphSearchResult } from './engine/graphEngine';
 import { SEEDED_SMES } from './engine/fixtures';
 import { ExchangeCycle, SMEProfile } from './agent/types';
-import { Sparkles, Award, ShieldCheck, ArrowRight, CheckCircle2, TrendingUp, Layers, Users } from 'lucide-react';
+import { Sparkles, Award, ShieldCheck, ArrowRight, CheckCircle2, TrendingUp, Layers, Users, Bot, Cpu, MessageSquare, RefreshCw, Store } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'network' | 'request' | 'matches' | 'exchanges' | 'profile'>('network');
   const [showRubricModal, setShowRubricModal] = useState(false);
+  const [showAgentModal, setShowAgentModal] = useState(false);
+  const [showInquiryModal, setShowInquiryModal] = useState(false);
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [inquiryCycle, setInquiryCycle] = useState<ExchangeCycle | null>(null);
 
   // Initialize engine & state
   const engine = useMemo(() => new DeterministicGraphEngine(), []);
-  const [smes] = useState<SMEProfile[]>(SEEDED_SMES);
+  const [smes, setSmes] = useState<SMEProfile[]>(SEEDED_SMES);
   const smesMap = useMemo(() => {
     const map = new Map<string, SMEProfile>();
     smes.forEach((s) => map.set(s.id, s));
@@ -69,10 +76,26 @@ export default function App() {
 
   const handleResetDemo = () => {
     engine.resetFixture();
+    setSmes(SEEDED_SMES);
     engine.findCycles(4).then((res) => {
       setGraphResult(res);
       setCycles(res.cycles);
     });
+  };
+
+  const handleOnboardingComplete = (
+    newSme: SMEProfile,
+    newCycles: ExchangeCycle[],
+    selectedCycle: ExchangeCycle | null
+  ) => {
+    setSmes((prev) => [...prev.filter((s) => s.id !== newSme.id), newSme]);
+    setCycles(newCycles);
+    if (selectedCycle) {
+      setSelectedCycleId(selectedCycle.id);
+    } else if (newCycles.length > 0) {
+      setSelectedCycleId(newCycles[0].id);
+    }
+    setCurrentTab('matches');
   };
 
   return (
@@ -82,6 +105,7 @@ export default function App() {
         currentTab={currentTab}
         onSelectTab={(tab) => setCurrentTab(tab as typeof currentTab)}
         onResetDemo={handleResetDemo}
+        onStartOnboarding={() => setShowOnboardingModal(true)}
       />
 
       {/* Main Workspace */}
@@ -90,6 +114,7 @@ export default function App() {
           activeTab={currentTab}
           onTabChange={(tab) => setCurrentTab(tab as typeof currentTab)}
           networkSmeCount={smes.length}
+          onStartOnboarding={() => setShowOnboardingModal(true)}
         />
 
         {/* Hackathon Rubric & Compliance Callout Bar */}
@@ -110,6 +135,43 @@ export default function App() {
               <Award className="w-3.5 h-3.5" />
               <span>Inspect Rubric Compliance</span>
             </button>
+          </div>
+        </div>
+
+        {/* AI Agent Live Quick-Action & Command Bar */}
+        <div className="bg-white border-b border-[#E3E0D7] px-4 py-2.5 shadow-2xs">
+          <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2.5 text-xs">
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 rounded-md bg-[#18243A] text-[#E7B84B] flex items-center justify-center">
+                <Bot className="w-3.5 h-3.5 text-[#E7B84B]" />
+              </div>
+              <div>
+                <span className="font-bold text-[#18243A]">Google Gemini AI Agent:</span>
+                <span className="text-[#68727D] ml-1.5 hidden sm:inline">
+                  Multilingual Orchestration, Graph Bounded DFS & Grounded Explanations
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAgentModal(true)}
+                className="px-3 py-1.5 rounded-lg bg-[#18243A] hover:bg-[#253752] text-[#E7B84B] font-semibold text-xs flex items-center space-x-1.5 transition-colors shadow-xs"
+              >
+                <Cpu className="w-3.5 h-3.5" />
+                <span>Agent Command Center</span>
+              </button>
+              <button
+                onClick={() => {
+                  setInquiryCycle(activeSummaryCycle);
+                  setShowInquiryModal(true);
+                }}
+                className="px-3 py-1.5 rounded-lg border border-[#E3E0D7] bg-[#F7F5EF] hover:bg-[#EBE7DC] text-[#18243A] font-medium text-xs flex items-center space-x-1.5 transition-colors"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-[#2E8B68]" />
+                <span>Ask Agent Q&A</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -134,17 +196,24 @@ export default function App() {
 
                   <div className="mt-4 flex flex-wrap gap-3">
                     <button
-                      onClick={() => setCurrentTab('request')}
+                      onClick={() => setShowOnboardingModal(true)}
                       className="px-4 py-2.5 rounded-lg bg-[#E7B84B] hover:bg-[#D4A538] text-[#18243A] font-bold text-xs sm:text-sm transition-all flex items-center space-x-2 shadow-xs"
                     >
-                      <span>Tell Cyclewise What You Need</span>
+                      <Store className="w-4 h-4" />
+                      <span>Onboard Your SME</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => setCurrentTab('matches')}
-                      className="px-4 py-2.5 rounded-lg bg-[#253752] hover:bg-[#324970] text-white font-semibold text-xs sm:text-sm transition-colors border border-[#3A4E70]"
+                      onClick={() => setCurrentTab('request')}
+                      className="px-4 py-2.5 rounded-lg bg-[#253752] hover:bg-[#324970] text-white font-semibold text-xs sm:text-sm transition-colors border border-[#3A4E70] flex items-center space-x-1.5"
                     >
-                      View 4-Way Rescue Cycle
+                      <span>Tell Cyclewise Need</span>
+                    </button>
+                    <button
+                      onClick={() => setCurrentTab('matches')}
+                      className="px-4 py-2.5 rounded-lg bg-transparent hover:bg-white/10 text-[#C2CEDA] hover:text-white font-medium text-xs sm:text-sm transition-colors border border-[#3A4E70]"
+                    >
+                      View Rescue Loops ({cycles.length})
                     </button>
                   </div>
                 </div>
@@ -194,14 +263,23 @@ export default function App() {
 
               {/* Seeded SMEs Directory with Needs & Offers */}
               <div className="bg-white rounded-xl border border-[#E3E0D7] p-5 shadow-xs">
-                <div className="flex items-center justify-between pb-3 border-b border-[#EFECE4]">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#EFECE4]">
                   <div>
                     <h3 className="text-sm font-bold text-[#18243A]">Active Nairobi SME Directory</h3>
-                    <p className="text-xs text-[#68727D]">Real synthetic business profiles in the seeded network</p>
+                    <p className="text-xs text-[#68727D]">Real synthetic business profiles in the verified network ({smes.length} total)</p>
                   </div>
-                  <span className="text-xs text-[#2E8B68] font-semibold bg-[#EAF5F0] px-2.5 py-1 rounded-full">
-                    6 Verified Nodes
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowOnboardingModal(true)}
+                      className="px-3 py-1.5 rounded-lg bg-[#18243A] hover:bg-[#253752] text-[#E7B84B] font-bold text-xs flex items-center space-x-1.5 transition-colors shadow-xs"
+                    >
+                      <Store className="w-3.5 h-3.5" />
+                      <span>Onboard New SME</span>
+                    </button>
+                    <span className="text-xs text-[#2E8B68] font-semibold bg-[#EAF5F0] px-2.5 py-1 rounded-full">
+                      {smes.length} Verified Nodes
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
@@ -241,7 +319,16 @@ export default function App() {
           {/* TAB 2: TELL CYCLEWISE (REQUEST CREATION) */}
           {currentTab === 'request' && (
             <div>
-              <TellCyclewiseSection onFindMatches={() => setCurrentTab('matches')} />
+              <TellCyclewiseSection
+                onFindMatches={() => setCurrentTab('matches')}
+                onOrchestrationComplete={(newCycles) => {
+                  setCycles(newCycles);
+                  if (newCycles.length > 0) {
+                    setSelectedCycleId(newCycles[0].id);
+                  }
+                  setCurrentTab('matches');
+                }}
+              />
             </div>
           )}
 
@@ -312,6 +399,15 @@ export default function App() {
                           smes={smesMap}
                           onCommit={handleCommitCycle}
                           onDecline={handleDeclineCycle}
+                          onAskAgent={(c) => {
+                            setInquiryCycle(c);
+                            setShowInquiryModal(true);
+                          }}
+                          onRequestSubstitute={(cycleId) => {
+                            const c = cycles.find((x) => x.id === cycleId) || null;
+                            setInquiryCycle(c);
+                            setShowAgentModal(true);
+                          }}
                         />
                       </div>
                     ))}
@@ -353,8 +449,38 @@ export default function App() {
         <BottomNav currentTab={currentTab} onSelectTab={(tab) => setCurrentTab(tab as typeof currentTab)} />
       </div>
 
+      {/* AI Agent Command Center Modal */}
+      <AgentCommandCenterModal
+        isOpen={showAgentModal}
+        onClose={() => setShowAgentModal(false)}
+        smes={smesMap}
+        activeCycle={activeSummaryCycle}
+        onCycleUpdate={(newCycles) => {
+          setCycles(newCycles);
+          if (newCycles.length > 0) {
+            setSelectedCycleId(newCycles[0].id);
+          }
+        }}
+      />
+
+      {/* Grounded Agent Inquiry Q&A Modal */}
+      <AgentInquiryModal
+        isOpen={showInquiryModal}
+        onClose={() => setShowInquiryModal(false)}
+        cycle={inquiryCycle || activeSummaryCycle}
+        smes={smesMap}
+      />
+
       {/* Hackathon Rubric Modal */}
       <HackathonRubricModal isOpen={showRubricModal} onClose={() => setShowRubricModal(false)} />
+
+      {/* SME Onboarding Wizard Modal */}
+      <SmeOnboardingModal
+        isOpen={showOnboardingModal}
+        onClose={() => setShowOnboardingModal(false)}
+        engine={engine}
+        onComplete={handleOnboardingComplete}
+      />
     </div>
   );
 }

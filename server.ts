@@ -7,6 +7,8 @@ import { SEEDED_SMES } from './src/engine/fixtures';
 import { guardrailCheckInput } from './src/agent/guardrails';
 import { validateExtractionSchema, validateBusinessRules } from './src/agent/schemas';
 import { ProviderRegistry } from './src/integrations/providerAdapters';
+import { CyclewiseAgent } from './src/agent/geminiAgent';
+import { SMEProfile } from './src/agent/types';
 
 dotenv.config();
 
@@ -19,6 +21,10 @@ const port = 3000;
 app.use(express.json());
 
 const graphEngine = new DeterministicGraphEngine();
+const agent = new CyclewiseAgent(graphEngine);
+
+const smesMap = new Map<string, SMEProfile>();
+SEEDED_SMES.forEach((s) => smesMap.set(s.id, s));
 
 // -------------------------------------------------------------
 // Versioned API Contracts (v1)
@@ -45,13 +51,58 @@ app.get('/api/v1/health', async (_req, res) => {
 
 // 2. Network Overview
 app.get('/api/v1/network', (_req, res) => {
+  const allSmes = Array.from(smesMap.values());
   const totalValue = 18000 + 18500 + 17500 + 18000;
   res.json({
-    smes: SEEDED_SMES,
+    smes: allSmes,
     active_exchanges_count: 1,
     completed_exchanges_count: 8,
     total_value_unlocked_kes: totalValue,
-    node_count: SEEDED_SMES.length,
+    node_count: allSmes.length,
+  });
+});
+
+// 2b. SME Onboarding
+app.post('/api/v1/sme/onboard', async (req, res) => {
+  const { name, sector, location, description, offer_summary, need_summary, languages } = req.body;
+  if (!name || !offer_summary || !need_summary) {
+    res.status(400).json({ error: 'Missing required SME onboarding fields (name, offer_summary, need_summary)' });
+    return;
+  }
+
+  const newId = `sme-${String(name).toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString().slice(-4)}`;
+  const newSme: SMEProfile = {
+    id: newId,
+    name: String(name).trim(),
+    sector: sector || 'General Trade',
+    description: description || 'Verified Nairobi SME node in multilateral exchange network',
+    location: location || 'Nairobi County',
+    languages: Array.isArray(languages) ? languages : ['en', 'sw'],
+    identity_status: 'verified',
+    offer_summary: String(offer_summary).trim(),
+    need_summary: String(need_summary).trim(),
+    trust_events: [
+      {
+        id: `te-${Date.now()}-1`,
+        sme_id: newId,
+        event_type: 'identity_confirmed',
+        outcome: 'verified',
+        evidence_text: `Onboarded into Nairobi SME Exchange Registry via physical node location at ${location || 'Nairobi'}.`,
+        created_at: new Date().toISOString().split('T')[0],
+      },
+    ],
+  };
+
+  smesMap.set(newSme.id, newSme);
+  const generatedEdges = graphEngine.addSME(newSme);
+  const searchResult = await graphEngine.findCycles(4);
+
+  res.json({
+    success: true,
+    sme: newSme,
+    generated_edges: generatedEdges,
+    cycles_found: searchResult.cycles.length,
+    matching_cycles: searchResult.cycles.filter(c => c.sme_sequence.includes(newSme.id)),
   });
 });
 
@@ -143,6 +194,99 @@ app.post('/api/v1/requests/validate', (req, res) => {
   }
 
   res.json({ valid: true, message: 'Input passed initial checks' });
+});
+
+// 8. Agent: Natural-Language Intent Extraction with Gemini (extract_need_offer)
+app.post('/api/v1/requests/parse', async (req, res) => {
+  const { message, language } = req.body;
+  if (!message || typeof message !== 'string') {
+    res.status(400).json({ error: 'Missing or invalid "message" string' });
+    return;
+  }
+
+  try {
+    const result = await agent.extractNeedOffer(message, language);
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Extraction error';
+    res.status(400).json({ error: message });
+  }
+});
+
+// 9. Agent: Full Multi-Step Human-in-the-Loop Orchestration
+app.post('/api/v1/agent/orchestrate', async (req, res) => {
+  const { message, language } = req.body;
+  if (!message || typeof message !== 'string') {
+    res.status(400).json({ error: 'Missing or invalid "message" string' });
+    return;
+  }
+
+  try {
+    const result = await agent.orchestrate(message, smesMap, language);
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Agent orchestration error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// 10. Agent: Grounded Cycle Explanation
+app.post('/api/v1/agent/explain', async (req, res) => {
+  const { cycle, language } = req.body;
+  if (!cycle || !cycle.edges) {
+    res.status(400).json({ error: 'Missing or invalid "cycle" object' });
+    return;
+  }
+
+  try {
+    const explanation = await agent.explainMatch(cycle, smesMap, language);
+    res.json({ explanation });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Explanation error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// 11. Agent: Grounded Inquiry Q&A
+app.post('/api/v1/agent/inquiry', async (req, res) => {
+  const { question, cycle, language } = req.body;
+  if (!question || typeof question !== 'string') {
+    res.status(400).json({ error: 'Missing or invalid "question" string' });
+    return;
+  }
+
+  try {
+    const result = await agent.answerInquiry(question, cycle, smesMap, language);
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Inquiry error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// 12. Agent: Autonomous Substitute Match Coordination
+app.post('/api/v1/agent/substitute', async (req, res) => {
+  const { declined_sme_id, cycle } = req.body;
+  if (!declined_sme_id || !cycle) {
+    res.status(400).json({ error: 'Missing declined_sme_id or cycle' });
+    return;
+  }
+
+  try {
+    const result = await agent.substituteMatch(declined_sme_id, cycle, smesMap);
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Substitute match error';
+    res.status(500).json({ error: message });
+  }
+});
+
+// 13. Agent: Evaluation Trajectory Logs
+app.get('/api/v1/agent/trajectories', (_req, res) => {
+  res.json({
+    trajectories: agent.getTrajectories(),
+    count: agent.getTrajectories().length,
+  });
 });
 
 // -------------------------------------------------------------

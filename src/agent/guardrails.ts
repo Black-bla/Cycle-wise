@@ -14,11 +14,12 @@ export interface SecurityCheckResult {
 export type AgentStage = 'parse' | 'validate' | 'search' | 'explain' | 'commit' | 'tracking';
 
 const ADVERSARIAL_PATTERNS = [
-  /ignore\s+(all\s+)?(previous|prior)\s+instructions/i,
+  /(ignore|disregard|override|bypass)\s+(all\s+)?(previous\s+|prior\s+)?instructions/i,
   /system\s+prompt\s+override/i,
   /you\s+are\s+now\s+in\s+developer\s+mode/i,
   /reveal\s+(api\s+key|secret|password|token)/i,
-  /grant\s+(admin|root|credit|loan)/i,
+  /(grant|issue|approve|give)\s+(an\s+)?(instant\s+|unsecured\s+)?(credit|loan|money)/i,
+  /(unsecured|instant|cash)\s+loan/i,
   /bypass\s+(verification|guardrail|rule)/i,
   /<script[\s\S]*?>[\s\S]*?<\/script>/i,
   /drop\s+table/i,

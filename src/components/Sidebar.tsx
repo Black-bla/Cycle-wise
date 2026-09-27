@@ -1,13 +1,14 @@
 import React from 'react';
-import { Home, PlusCircle, GitMerge, Clock, UserCheck, Shield, Cpu, RefreshCw } from 'lucide-react';
+import { Home, PlusCircle, GitMerge, Clock, UserCheck, Shield, Cpu, RefreshCw, Store } from 'lucide-react';
 
 interface SidebarProps {
   currentTab: string;
   onSelectTab: (tab: string) => void;
   onResetDemo: () => void;
+  onStartOnboarding?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, onResetDemo }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, onResetDemo, onStartOnboarding }) => {
   const links = [
     { id: 'network', label: 'Network Overview', icon: Home },
     { id: 'request', label: 'Tell Cyclewise', icon: PlusCircle, isPrimary: true },
@@ -33,6 +34,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, onRes
 
       {/* Navigation */}
       <nav className="p-3 space-y-1.5 flex-1">
+        {onStartOnboarding && (
+          <button
+            onClick={onStartOnboarding}
+            className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold bg-[#233554] hover:bg-[#2e4773] text-[#E7B84B] border border-[#374f78] transition-all mb-2.5 text-left shadow-2xs group"
+          >
+            <Store className="w-3.5 h-3.5 text-[#E7B84B] group-hover:scale-110 transition-transform" />
+            <span>SME Onboarding Flow</span>
+            <span className="ml-auto text-[9px] px-1.5 py-0.2 rounded bg-[#E7B84B]/20 text-[#E7B84B]">New</span>
+          </button>
+        )}
+
         {links.map((link) => {
           const Icon = link.icon;
           const isActive = currentTab === link.id;

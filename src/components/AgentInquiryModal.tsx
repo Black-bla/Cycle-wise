@@ -18,6 +18,7 @@ export const AgentInquiryModal: React.FC<AgentInquiryModalProps> = ({
   onRunSubstitute,
 }) => {
   const [question, setQuestion] = useState('');
+  const [modelPreference, setModelPreference] = useState<string>('auto');
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Array<{
     sender: 'user' | 'agent';
@@ -30,8 +31,8 @@ export const AgentInquiryModal: React.FC<AgentInquiryModalProps> = ({
     {
       sender: 'agent',
       text: cycle
-        ? `Jambo! I am Cyclewise AI Coordinator powered by Gemini. I have verified facts for this ${cycle.cycle_length}-business rescue loop (KES ${cycle.estimated_value_unlocked.toLocaleString()} unlocked). You can ask me how delivery works, how parity is calculated, how participants are protected, or ask questions in English, Kiswahili, or Sheng.`
-        : 'Jambo! I am Cyclewise AI Coordinator powered by Gemini. Ask me any question about the SME exchange network, trust verification, or how reciprocal barter loops prevent debt.',
+        ? `Jambo! I am Cyclewise AI Coordinator with NVIDIA Nemotron & Gemini multi-model routing. I have verified facts for this ${cycle.cycle_length}-business rescue loop (KES ${cycle.estimated_value_unlocked.toLocaleString()} unlocked). You can ask me how delivery works, how parity is calculated, how participants are protected, or ask questions in English, Kiswahili, or Sheng.`
+        : 'Jambo! I am Cyclewise AI Coordinator with NVIDIA Nemotron & Gemini routing. Ask me any question about the SME exchange network, trust verification, or how reciprocal barter loops prevent debt.',
       citations: ['Cyclewise Verified Graph Engine', 'National Registry Verification'],
     },
   ]);
@@ -60,6 +61,7 @@ export const AgentInquiryModal: React.FC<AgentInquiryModalProps> = ({
         body: JSON.stringify({
           question: textToAsk,
           cycle: cycle || undefined,
+          model_preference: modelPreference,
         }),
       });
 
@@ -190,19 +192,37 @@ export const AgentInquiryModal: React.FC<AgentInquiryModalProps> = ({
           )}
         </div>
 
-        {/* Quick query chips */}
-        <div className="p-2 sm:px-4 bg-[#F2EFE8] border-t border-[#E3E0D7] flex items-center gap-1.5 overflow-x-auto text-[11px]">
-          <span className="text-[#68727D] shrink-0 font-medium text-[10px] uppercase">Ask:</span>
-          {quickQuestions.map((q, idx) => (
-            <button
-              key={idx}
-              onClick={() => handleAsk(q.q)}
-              disabled={isLoading}
-              className="shrink-0 px-2.5 py-1 rounded-full bg-white hover:bg-[#E3E0D7] text-[#18243A] border border-[#D5D1C4] transition-colors"
+        {/* Quick query & Model Selector chips */}
+        <div className="p-2 sm:px-4 bg-[#F2EFE8] border-t border-[#E3E0D7] flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <span className="text-[#68727D] shrink-0 font-medium text-[10px] uppercase">Ask:</span>
+            {quickQuestions.map((q, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleAsk(q.q)}
+                disabled={isLoading}
+                className="shrink-0 px-2.5 py-1 rounded-full bg-white hover:bg-[#E3E0D7] text-[#18243A] border border-[#D5D1C4] transition-colors"
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-[#68727D]">Model:</span>
+            <select
+              value={modelPreference}
+              onChange={(e) => setModelPreference(e.target.value)}
+              className="px-2 py-0.5 rounded-md border border-[#D5D1C4] bg-white text-[10px] font-semibold text-[#18243A]"
             >
-              {q.label}
-            </button>
-          ))}
+              <option value="auto">Auto Cascade (NVIDIA Nemotron ➔ Gemini Flash ➔ Gemini Failsafe)</option>
+              <option value="nvidia-nemotron">NVIDIA Nemotron 3 Ultra</option>
+              <option value="nvidia-nemotron-70b">NVIDIA Nemotron 70B</option>
+              <option value="google-gemini-flash">Google Gemini 3.8 Flash</option>
+              <option value="google-gemini-lite">Google Gemini 3.1 Flash Lite (Failsafe)</option>
+              <option value="google-gemini-pro">Google Gemini 3.1 Pro (Failsafe)</option>
+            </select>
+          </div>
         </div>
 
         {/* Input box */}

@@ -196,16 +196,30 @@ app.post('/api/v1/requests/validate', (req, res) => {
   res.json({ valid: true, message: 'Input passed initial checks' });
 });
 
-// 8. Agent: Natural-Language Intent Extraction with Gemini (extract_need_offer)
+// 7b. AI Models & Multi-Provider Health Status
+app.get('/api/v1/agent/models', (_req, res) => {
+  res.json({
+    providers: agent.getModelProviders(),
+    default_cascade: [
+      'NVIDIA Nemotron 3 Ultra (nvidia/nemotron-3-super-120b)',
+      'Google Gemini 3.8 Flash (gemini-3.8-flash)',
+      'Google Gemini 3.1 Flash Lite [Failsafe] (gemini-3.1-flash-lite)',
+      'Google Gemini 3.1 Pro [Failsafe] (gemini-3.1-pro-preview)',
+      'Deterministic Grounded Engine (cyclewise-dfs-v1)',
+    ],
+  });
+});
+
+// 8. Agent: Natural-Language Intent Extraction with Multi-Model Support (extract_need_offer)
 app.post('/api/v1/requests/parse', async (req, res) => {
-  const { message, language } = req.body;
+  const { message, language, model_preference } = req.body;
   if (!message || typeof message !== 'string') {
     res.status(400).json({ error: 'Missing or invalid "message" string' });
     return;
   }
 
   try {
-    const result = await agent.extractNeedOffer(message, language);
+    const result = await agent.extractNeedOffer(message, language, model_preference);
     res.json(result);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Extraction error';
@@ -215,14 +229,14 @@ app.post('/api/v1/requests/parse', async (req, res) => {
 
 // 9. Agent: Full Multi-Step Human-in-the-Loop Orchestration
 app.post('/api/v1/agent/orchestrate', async (req, res) => {
-  const { message, language } = req.body;
+  const { message, language, model_preference } = req.body;
   if (!message || typeof message !== 'string') {
     res.status(400).json({ error: 'Missing or invalid "message" string' });
     return;
   }
 
   try {
-    const result = await agent.orchestrate(message, smesMap, language);
+    const result = await agent.orchestrate(message, smesMap, language, model_preference);
     res.json(result);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Agent orchestration error';
@@ -232,14 +246,14 @@ app.post('/api/v1/agent/orchestrate', async (req, res) => {
 
 // 10. Agent: Grounded Cycle Explanation
 app.post('/api/v1/agent/explain', async (req, res) => {
-  const { cycle, language } = req.body;
+  const { cycle, language, model_preference } = req.body;
   if (!cycle || !cycle.edges) {
     res.status(400).json({ error: 'Missing or invalid "cycle" object' });
     return;
   }
 
   try {
-    const explanation = await agent.explainMatch(cycle, smesMap, language);
+    const explanation = await agent.explainMatch(cycle, smesMap, language, model_preference);
     res.json({ explanation });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Explanation error';
@@ -249,14 +263,14 @@ app.post('/api/v1/agent/explain', async (req, res) => {
 
 // 11. Agent: Grounded Inquiry Q&A
 app.post('/api/v1/agent/inquiry', async (req, res) => {
-  const { question, cycle, language } = req.body;
+  const { question, cycle, language, model_preference } = req.body;
   if (!question || typeof question !== 'string') {
     res.status(400).json({ error: 'Missing or invalid "question" string' });
     return;
   }
 
   try {
-    const result = await agent.answerInquiry(question, cycle, smesMap, language);
+    const result = await agent.answerInquiry(question, cycle, smesMap, language, model_preference);
     res.json(result);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Inquiry error';

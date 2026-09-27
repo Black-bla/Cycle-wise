@@ -36,6 +36,7 @@ export const AgentCommandCenterModal: React.FC<AgentCommandCenterModalProps> = (
   onCycleUpdate,
 }) => {
   const [activeTab, setActiveTab] = useState<'orchestrate' | 'substitute' | 'safety' | 'trajectories'>('orchestrate');
+  const [modelPreference, setModelPreference] = useState<string>('auto');
   const [inputText, setInputText] = useState(
     'Nahitaji cartons 20 za cooking oil by Friday Nairobi Eastleigh. Naweza kusaidia na quarterly bookkeeping wiki ijayo value about 18k.'
   );
@@ -98,7 +99,7 @@ export const AgentCommandCenterModal: React.FC<AgentCommandCenterModalProps> = (
       const res = await fetch('/api/v1/agent/orchestrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: inputText }),
+        body: JSON.stringify({ message: inputText, model_preference: modelPreference }),
       });
 
       if (!res.ok) {
@@ -298,9 +299,49 @@ export const AgentCommandCenterModal: React.FC<AgentCommandCenterModalProps> = (
                 </div>
               )}
 
+              {/* Model Provider & Cascade Selector */}
+              <div className="p-3.5 rounded-xl bg-white border border-[#E3E0D7] space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-[#18243A] flex items-center space-x-1.5">
+                    <Bot className="w-3.5 h-3.5 text-[#E7B84B]" />
+                    <span>AI Model & Provider Cascade Policy:</span>
+                  </label>
+                  <span className="text-[10px] text-[#2E8B68] font-bold bg-[#EAF5F0] px-2 py-0.5 rounded-md">
+                    Multi-Model Failover Active
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
+                  {[
+                    { id: 'auto', label: 'Auto Failover', desc: 'NVIDIA ➔ Gemini ➔ Failsafe' },
+                    { id: 'nvidia-nemotron', label: 'Nemotron 3 Ultra', desc: '120B NIM' },
+                    { id: 'nvidia-nemotron-70b', label: 'Nemotron 70B', desc: 'Llama 3.1 NIM' },
+                    { id: 'google-gemini-flash', label: 'Gemini 3.8 Flash', desc: 'Primary GenAI' },
+                    { id: 'google-gemini-lite', label: 'Gemini Flash Lite', desc: 'Failsafe Level 1' },
+                    { id: 'google-gemini-pro', label: 'Gemini 3.1 Pro', desc: 'Failsafe Level 2' },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setModelPreference(m.id)}
+                      className={`p-2 rounded-lg border text-left transition-all ${
+                        modelPreference === m.id
+                          ? 'bg-[#18243A] text-[#E7B84B] border-[#18243A] shadow-xs'
+                          : 'bg-[#F7F5EF] text-[#17202A] border-[#E3E0D7] hover:border-[#18243A]'
+                      }`}
+                    >
+                      <span className="font-bold block leading-tight">{m.label}</span>
+                      <span className={`text-[10px] block mt-0.5 ${modelPreference === m.id ? 'text-[#C2CEDA]' : 'text-[#68727D]'}`}>
+                        {m.desc}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[#68727D]">
-                  Powered by <strong className="text-[#18243A]">Google Gemini 3.8 Flash</strong> with server-side safety checks
+                  Primary: <strong className="text-[#18243A]">NVIDIA Nemotron 3 Ultra</strong> &bull; Core: <strong className="text-[#18243A]">Google Gemini 3.8 Flash</strong> &bull; Failsafes: <strong className="text-[#18243A]">Gemini Lite / Pro</strong>
                 </span>
                 <button
                   onClick={handleRunAgent}

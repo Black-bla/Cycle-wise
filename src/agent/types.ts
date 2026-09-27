@@ -12,6 +12,8 @@ export interface NeedItem {
   deadline: string | null;
   location: string | null;
   estimated_value: number | null;
+  price_range_min?: number | null;
+  price_range_max?: number | null;
   constraints: string[];
 }
 
@@ -122,6 +124,38 @@ export interface ParticipantDecision {
   decision: 'commit' | 'clarify' | 'decline' | 'pending';
   note?: string;
   timestamp: string;
+}
+
+export interface InvoiceLineItem {
+  from_sme: string;
+  to_sme: string;
+  item_or_service: string;
+  quantity: number;
+  unit: string;
+  unit_val_kes: number;
+  total_val_kes: number;
+}
+
+export interface ExchangeInvoice {
+  invoice_number: string;
+  cycle_id: string;
+  issue_date: string;
+  settlement_status: 'ESCROW_LOCKED' | 'DISPATCH_IN_PROGRESS' | 'RECONCILED_100_SETTLED';
+  total_barter_value_kes: number;
+  net_cash_debt_created_kes: 0; // Strictly 0 in Cyclewise Anti-Debt Protocol
+  verification_hash: string;
+  line_items: InvoiceLineItem[];
+  compliance_declaration: string;
+  authorized_agent: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  action: string;
+  actor: string;
+  details: string;
+  hash_signature: string;
 }
 
 export interface AgentTrajectoryLog {

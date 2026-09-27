@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-indigo-deep: #18243A;
+    --color-maize-gold: #E7B84B;
+    --color-leaf-green: #2E8B68;
+    --color-burnt-orange: #D8783D;
+    --color-ivory: #F7F5EF;
+    --color-surface: #FFFFFF;
+    --color-ink: #17202A;
+    --color-slate: #68727D;
+    --color-border: #E3E0D7;
+  }
+
+  body {
+    background-color: var(--color-ivory);
+    color: var(--color-ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* Custom utility colors aligned with visual system */
+.bg-ivory { background-color: #F7F5EF; }
+.bg-indigo-deep { background-color: #18243A; }
+.text-indigo-deep { color: #18243A; }
+.border-cycle-border { border-color: #E3E0D7; }
+.bg-maize-gold { background-color: #E7B84B; }
+.text-maize-gold { color: #E7B84B; }
+.bg-leaf-green { background-color: #2E8B68; }
+.text-leaf-green { color: #2E8B68; }
+.bg-burnt-orange { background-color: #D8783D; }
+.text-burnt-orange { color: #D8783D; }
+.text-ink { color: #17202A; }
+.text-slate-muted { color: #68727D; }
+
+/* Accessible focus ring */
+*:focus-visible {
+  outline: 2px solid #E7B84B;
+  outline-offset: 2px;
+}
